@@ -21,6 +21,10 @@ export default function HomePage() {
             posts by day
           </li>
           <li>
+            <Link href="/inbox">Inbox</Link> — comments across a client&apos;s
+            accounts, with replies &amp; canned responses
+          </li>
+          <li>
             <Link href="/api/health">/api/health</Link> — service + adapter status
           </li>
         </ul>
@@ -28,8 +32,8 @@ export default function HomePage() {
 
       <section style={{ marginTop: 24, color: "var(--muted)", fontSize: 14 }}>
         <p>
-          See <code>docs/roadmap.md</code> for what lands next. The unified inbox
-          (comment/DM ingestion + replies) is the upcoming phase.
+          See <code>docs/roadmap.md</code> for what lands next: more platform
+          adapters (X, LinkedIn) and AI-drafted replies + sentiment tagging.
         </p>
       </section>
     </main>

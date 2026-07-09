@@ -8,14 +8,16 @@ Think Hootsuite / Sprout Social, but purpose-built: Node.js, AI-assisted triage,
 
 ## Status
 
-**Phases 1–2 — Foundation, publish, auth, scheduling.** A running Next.js app
-with the full Prisma data model, the `PlatformAdapter` interface with a **live
-Meta (FB/IG) adapter**, at-rest token encryption, tenant-scoping helpers,
-end-to-end **manual publish**, **Clerk auth** (gated — header fallback in dev),
-an **approval workflow** (draft → pending → approved → scheduled), **scheduled
-publishing** via a cron-driven due-post scanner, and a **content calendar**. The
-unified inbox (comment/DM ingestion + replies) is the next phase — see the
-[roadmap](docs/roadmap.md).
+**Phases 1–3 — Foundation, publish, auth, scheduling, unified inbox.** A running
+Next.js app with the full Prisma data model, the `PlatformAdapter` interface with
+a **live Meta (FB/IG) adapter**, at-rest token encryption, tenant-scoping
+helpers, end-to-end **manual publish**, **Clerk auth** (gated — header fallback
+in dev), an **approval workflow** (draft → pending → approved → scheduled),
+**scheduled publishing** via a cron-driven due-post scanner, a **content
+calendar**, and a **unified inbox**: comment ingestion by Meta **webhook**
+(signature-verified) with a **polling cron** fallback, plus reply sending,
+assignment, and canned responses. Adding X/LinkedIn adapters and AI-drafted
+replies is the next phase — see the [roadmap](docs/roadmap.md).
 
 ## Getting started
 
@@ -70,6 +72,13 @@ curl -X POST -H 'x-agency-id: <id>' -H 'content-type: application/json' \
 Scheduled posts are published by a cron tick (`vercel.json` → `*/5 * * * *`)
 that hits `GET /api/cron/publish-due` with `Authorization: Bearer $CRON_SECRET`.
 
+The unified inbox ingests comments two ways: Meta posts to
+`/api/webhooks/meta` (verified with `META_APP_SECRET`; subscription handshake
+uses `META_WEBHOOK_VERIFY_TOKEN`), and a `*/15` cron polls
+`/api/cron/sync-comments` as a fallback. Reply, assign, and manage canned
+responses via `/api/comments/[id]/reply`, `/api/comments/[id]/assign`, and
+`/api/canned-responses`.
+
 Run the tests with `npm test` (Vitest — crypto, publish orchestration, Meta
 adapter, tenant resolver, approval workflow, and the due-post runner; all with
 fakes/mocked `fetch`, no network or DB needed).
@@ -95,6 +104,8 @@ src/lib/publish.ts          # manual-publish orchestrator (injectable, unit-test
 src/lib/publish-store.ts    # Prisma stores for the orchestrator (tenant + system)
 src/lib/workflow.ts         # approval/scheduling state machine (pure, unit-tested)
 src/lib/schedule-runner.ts  # due-post publisher run by the cron tick
+src/lib/inbox.ts            # comment ingestion (polling + webhook), injectable
+src/lib/meta-webhook.ts     # webhook signature verify + event parsing (pure)
 vercel.json                 # Vercel Cron schedule for /api/cron/publish-due
 src/app/                    # Next.js app router (pages + API routes)
 test/                       # Vitest suite

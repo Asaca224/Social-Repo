@@ -114,13 +114,28 @@ model Client {
   brandingConfig Json?    @map("branding_config")
   createdAt      DateTime @default(now()) @map("created_at")
 
-  agency         Agency          @relation(fields: [agencyId], references: [id], onDelete: Cascade)
-  socialAccounts SocialAccount[]
-  posts          Post[]
-  clientUsers    ClientUser[]
+  agency          Agency           @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  socialAccounts  SocialAccount[]
+  posts           Post[]
+  clientUsers     ClientUser[]
+  cannedResponses CannedResponse[]
 
   @@index([agencyId])
   @@map("clients")
+}
+
+// Saved replies per client, used from the unified inbox.
+model CannedResponse {
+  id        String   @id @default(cuid())
+  clientId  String   @map("client_id")
+  title     String
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("canned_responses")
 }
 
 // Client-side portal access: joins a portal User to a Client workspace.
