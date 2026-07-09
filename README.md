@@ -8,9 +8,51 @@ Think Hootsuite / Sprout Social, but purpose-built: Node.js, AI-assisted triage,
 
 ## Status
 
-**Phase 0 — Specification.** This repository currently contains the product and
-architecture specification only. No application code has landed yet. See the
-[roadmap](docs/roadmap.md) for the path from MVP to V1.
+**Phase 1 — Foundation scaffold.** The repo now has a running Next.js app plus the
+core building blocks: the full Prisma data model, the `PlatformAdapter` interface
+with a Meta stub, at-rest token encryption, and tenant-scoping helpers. Auth
+(Clerk), scheduling (BullMQ), and the live Meta integration are upcoming phases —
+see the [roadmap](docs/roadmap.md).
+
+## Getting started
+
+```bash
+npm install                 # also runs `prisma generate`
+cp .env.example .env        # fill in DATABASE_URL + TOKEN_ENCRYPTION_KEY
+npm run dev                 # http://localhost:3000
+```
+
+Useful scripts:
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Next.js dev server |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint (next config) |
+| `npm run build` | Production build |
+| `npm run prisma:migrate` | Create/apply a dev migration against `DATABASE_URL` |
+
+Once a DB is connected, seed an agency + client and exercise the API:
+
+```bash
+curl localhost:3000/api/health
+curl -H 'x-agency-id: <id>' localhost:3000/api/clients
+```
+
+> Tenant resolution currently reads an `x-agency-id` header as a placeholder for
+> the Clerk session that lands in a later phase (see `src/lib/api.ts`).
+
+## Layout
+
+```
+prisma/schema.prisma        # all core tables (docs/data-model.md)
+src/lib/db.ts               # Prisma client singleton
+src/lib/crypto.ts           # AES-256-GCM token encryption at rest
+src/lib/env.ts              # zod-validated environment
+src/lib/tenancy.ts          # multi-tenant scoping helpers
+src/lib/adapters/           # PlatformAdapter interface + Meta stub + registry
+src/app/                    # Next.js app router (pages + API routes)
+```
 
 ## Documentation
 
