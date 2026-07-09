@@ -8,12 +8,13 @@ Think Hootsuite / Sprout Social, but purpose-built: Node.js, AI-assisted triage,
 
 ## Status
 
-**Phase 1 — Foundation + manual publish + auth.** A running Next.js app with the
-full Prisma data model, the `PlatformAdapter` interface with a **live Meta
-(FB/IG) adapter**, at-rest token encryption, tenant-scoping helpers, an
-end-to-end **manual publish** flow (connect account → draft post → publish to
-target platforms), and **Clerk auth** (gated — falls back to a header in dev).
-Scheduling (BullMQ) and the content calendar are the next phase — see the
+**Phases 1–2 — Foundation, publish, auth, scheduling.** A running Next.js app
+with the full Prisma data model, the `PlatformAdapter` interface with a **live
+Meta (FB/IG) adapter**, at-rest token encryption, tenant-scoping helpers,
+end-to-end **manual publish**, **Clerk auth** (gated — header fallback in dev),
+an **approval workflow** (draft → pending → approved → scheduled), **scheduled
+publishing** via a cron-driven due-post scanner, and a **content calendar**. The
+unified inbox (comment/DM ingestion + replies) is the next phase — see the
 [roadmap](docs/roadmap.md).
 
 ## Getting started
@@ -53,8 +54,25 @@ curl -H 'x-agency-id: <id>' -H 'content-type: application/json' \
 curl -X POST -H 'x-agency-id: <id>' localhost:3000/api/posts/<postId>/publish
 ```
 
-Run the tests with `npm test` (Vitest — crypto, publish orchestration, and the
-Meta adapter, all with fakes/mocked `fetch`, no network or DB needed).
+Move a post through the approval workflow and schedule it:
+
+```bash
+# submit -> approve -> schedule for a future time
+curl -X POST -H 'x-agency-id: <id>' -H 'content-type: application/json' \
+  -d '{"action":"submit"}'  localhost:3000/api/posts/<postId>/transition
+curl -X POST -H 'x-agency-id: <id>' -H 'content-type: application/json' \
+  -d '{"action":"approve"}' localhost:3000/api/posts/<postId>/transition
+curl -X POST -H 'x-agency-id: <id>' -H 'content-type: application/json' \
+  -d '{"action":"schedule","scheduledFor":"2026-12-01T09:00:00Z"}' \
+  localhost:3000/api/posts/<postId>/transition
+```
+
+Scheduled posts are published by a cron tick (`vercel.json` → `*/5 * * * *`)
+that hits `GET /api/cron/publish-due` with `Authorization: Bearer $CRON_SECRET`.
+
+Run the tests with `npm test` (Vitest — crypto, publish orchestration, Meta
+adapter, tenant resolver, approval workflow, and the due-post runner; all with
+fakes/mocked `fetch`, no network or DB needed).
 
 > **Auth is gated on configuration.** Set `CLERK_SECRET_KEY` +
 > `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and requests authenticate via Clerk — the
@@ -74,7 +92,10 @@ src/lib/auth.ts             # tenant resolution (Clerk org -> agency, header fal
 src/middleware.ts           # gated Clerk middleware (pass-through when unconfigured)
 src/lib/adapters/           # PlatformAdapter interface + live Meta adapter + registry
 src/lib/publish.ts          # manual-publish orchestrator (injectable, unit-tested)
-src/lib/publish-store.ts    # Prisma-backed, tenant-scoped store for the orchestrator
+src/lib/publish-store.ts    # Prisma stores for the orchestrator (tenant + system)
+src/lib/workflow.ts         # approval/scheduling state machine (pure, unit-tested)
+src/lib/schedule-runner.ts  # due-post publisher run by the cron tick
+vercel.json                 # Vercel Cron schedule for /api/cron/publish-due
 src/app/                    # Next.js app router (pages + API routes)
 test/                       # Vitest suite
 ```

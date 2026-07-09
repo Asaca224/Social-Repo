@@ -28,6 +28,38 @@ export function prismaPublishStore(
       return post;
     },
 
+    ...sharedStore(prisma),
+  };
+}
+
+/**
+ * System-context store (no tenant filter) for trusted background jobs such as
+ * the scheduled-publish cron. Resolves a post by id regardless of agency.
+ */
+export function systemPublishStore(prisma: PrismaClient): PublishStore {
+  return {
+    async findPost(postId: string): Promise<PublishablePost | null> {
+      return prisma.post.findUnique({
+        where: { id: postId },
+        select: {
+          id: true,
+          clientId: true,
+          content: true,
+          mediaUrls: true,
+          platformTargets: true,
+          status: true,
+        },
+      });
+    },
+    ...sharedStore(prisma),
+  };
+}
+
+/** Store methods that are identical across tenant and system contexts. */
+function sharedStore(
+  prisma: PrismaClient,
+): Omit<PublishStore, "findPost"> {
+  return {
     async findConnectedAccount(
       clientId: string,
       platform: Platform,

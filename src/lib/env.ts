@@ -18,6 +18,9 @@ const envSchema = z.object({
   CLERK_SECRET_KEY: z.string().optional(),
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
 
+  // Shared secret guarding the scheduled-publish cron (see vercel.json).
+  CRON_SECRET: z.string().optional(),
+
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
