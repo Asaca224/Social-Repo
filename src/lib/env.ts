@@ -26,6 +26,17 @@ const envSchema = z.object({
   // AI (Claude). Optional: when unset, AI endpoints return 503.
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().optional(),
+  ANTHROPIC_REPORT_MODEL: z.string().optional(),
+
+  // Billing (Stripe). Optional: when unset, billing endpoints return 503.
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PRICE_STARTER: z.string().optional(),
+  STRIPE_PRICE_GROWTH: z.string().optional(),
+  STRIPE_PRICE_AGENCY: z.string().optional(),
+
+  // Public base URL for checkout redirects.
+  APP_URL: z.string().url().optional(),
 
   NODE_ENV: z
     .enum(["development", "test", "production"])

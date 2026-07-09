@@ -9,7 +9,9 @@ import type { LLM } from "./ai";
  * can respond 503 rather than crash, and the app runs without an AI key.
  */
 
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5";
+// Haiku for inbox drafts/sentiment; Sonnet for report summaries (per spec).
+const DEFAULT_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5";
+export const REPORT_MODEL = process.env.ANTHROPIC_REPORT_MODEL ?? "claude-sonnet-5";
 
 export function isAIEnabled(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
@@ -18,7 +20,10 @@ export function isAIEnabled(): boolean {
 class AnthropicLLM implements LLM {
   private client: Anthropic;
 
-  constructor(apiKey: string) {
+  constructor(
+    apiKey: string,
+    private readonly model: string,
+  ) {
     this.client = new Anthropic({ apiKey });
   }
 
@@ -28,7 +33,7 @@ class AnthropicLLM implements LLM {
     maxTokens?: number;
   }): Promise<string> {
     const message = await this.client.messages.create({
-      model: MODEL,
+      model: this.model,
       max_tokens: input.maxTokens ?? 300,
       system: input.system,
       messages: [{ role: "user", content: input.prompt }],
@@ -42,8 +47,8 @@ class AnthropicLLM implements LLM {
 }
 
 /** The AI client, or null when ANTHROPIC_API_KEY is not configured. */
-export function getLLM(): LLM | null {
+export function getLLM(model: string = DEFAULT_MODEL): LLM | null {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
-  return new AnthropicLLM(apiKey);
+  return new AnthropicLLM(apiKey, model);
 }

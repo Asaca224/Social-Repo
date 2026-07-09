@@ -25,6 +25,9 @@ export default function HomePage() {
             accounts, with replies &amp; canned responses
           </li>
           <li>
+            <Link href="/billing">Billing</Link> — subscription tiers (Stripe)
+          </li>
+          <li>
             <Link href="/api/health">/api/health</Link> — service + adapter status
           </li>
         </ul>

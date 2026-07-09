@@ -5,6 +5,7 @@ import { encryptToken } from "@/lib/crypto";
 import { assertClientInTenant, TenantAccessError } from "@/lib/tenancy";
 import { errorResponse, json, zodErrorResponse } from "@/lib/api";
 import { resolveTenant } from "@/lib/auth";
+import { canConnectAccount, effectiveAccountLimit } from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,35 @@ export async function POST(request: Request) {
   } catch (err) {
     if (err instanceof TenantAccessError) return errorResponse("Client not found", 404);
     throw err;
+  }
+
+  // Enforce the plan's account limit — only when connecting a NEW account
+  // (re-connecting an existing one doesn't grow the count).
+  const existing = await prisma.socialAccount.findUnique({
+    where: {
+      platform_externalAccountId: {
+        platform: data.platform,
+        externalAccountId: data.externalAccountId,
+      },
+    },
+    select: { id: true },
+  });
+  if (!existing) {
+    const [sub, count] = await Promise.all([
+      prisma.subscription.findUnique({
+        where: { agencyId: ctx.agencyId },
+        select: { status: true, accountsLimit: true },
+      }),
+      prisma.socialAccount.count({
+        where: { client: { agencyId: ctx.agencyId } },
+      }),
+    ]);
+    if (!canConnectAccount(count, effectiveAccountLimit(sub))) {
+      return errorResponse(
+        "Account limit reached for your plan. Upgrade to connect more accounts.",
+        402,
+      );
+    }
   }
 
   const account = await prisma.socialAccount.upsert({
