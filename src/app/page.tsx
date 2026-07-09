@@ -32,8 +32,8 @@ export default function HomePage() {
 
       <section style={{ marginTop: 24, color: "var(--muted)", fontSize: 14 }}>
         <p>
-          See <code>docs/roadmap.md</code> for what lands next: more platform
-          adapters (X, LinkedIn) and AI-drafted replies + sentiment tagging.
+          See <code>docs/roadmap.md</code> for what lands next: Stripe billing,
+          white-label client portals, and PDF reports.
         </p>
       </section>
     </main>

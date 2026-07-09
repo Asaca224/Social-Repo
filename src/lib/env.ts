@@ -23,6 +23,10 @@ const envSchema = z.object({
   // Shared secret guarding the scheduled-publish cron (see vercel.json).
   CRON_SECRET: z.string().optional(),
 
+  // AI (Claude). Optional: when unset, AI endpoints return 503.
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().optional(),
+
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),

@@ -8,16 +8,17 @@ Think Hootsuite / Sprout Social, but purpose-built: Node.js, AI-assisted triage,
 
 ## Status
 
-**Phases 1–3 — Foundation, publish, auth, scheduling, unified inbox.** A running
-Next.js app with the full Prisma data model, the `PlatformAdapter` interface with
-a **live Meta (FB/IG) adapter**, at-rest token encryption, tenant-scoping
-helpers, end-to-end **manual publish**, **Clerk auth** (gated — header fallback
-in dev), an **approval workflow** (draft → pending → approved → scheduled),
-**scheduled publishing** via a cron-driven due-post scanner, a **content
-calendar**, and a **unified inbox**: comment ingestion by Meta **webhook**
-(signature-verified) with a **polling cron** fallback, plus reply sending,
-assignment, and canned responses. Adding X/LinkedIn adapters and AI-drafted
-replies is the next phase — see the [roadmap](docs/roadmap.md).
+**Phases 1–4 — Foundation, publish, auth, scheduling, inbox, multi-platform + AI.**
+A running Next.js app with the full Prisma data model, **`PlatformAdapter`
+implementations for Meta (FB/IG), X, and LinkedIn**, at-rest token encryption,
+tenant-scoping helpers, end-to-end **manual publish**, **Clerk auth** (gated —
+header fallback in dev), an **approval workflow** (draft → pending → approved →
+scheduled), **scheduled publishing** via a cron-driven due-post scanner, a
+**content calendar**, a **unified inbox** (Meta **webhook** ingestion with a
+**polling cron** fallback, reply/assign/canned responses), and **AI features**
+(gated on `ANTHROPIC_API_KEY`): **AI-drafted reply suggestions** and **sentiment
+tagging** via Claude Haiku — AI drafts, a human sends. Billing and white-label
+reporting are the next phase — see the [roadmap](docs/roadmap.md).
 
 ## Getting started
 
@@ -79,6 +80,11 @@ uses `META_WEBHOOK_VERIFY_TOKEN`), and a `*/15` cron polls
 responses via `/api/comments/[id]/reply`, `/api/comments/[id]/assign`, and
 `/api/canned-responses`.
 
+With `ANTHROPIC_API_KEY` set, the inbox can draft replies and tag sentiment
+with Claude Haiku — `POST /api/comments/[id]/ai-draft` returns a suggested
+reply (a human still sends it) and `POST /api/comments/[id]/classify` stores
+`positive`/`neutral`/`negative`. Without the key these return 503.
+
 Run the tests with `npm test` (Vitest — crypto, publish orchestration, Meta
 adapter, tenant resolver, approval workflow, and the due-post runner; all with
 fakes/mocked `fetch`, no network or DB needed).
@@ -106,6 +112,8 @@ src/lib/workflow.ts         # approval/scheduling state machine (pure, unit-test
 src/lib/schedule-runner.ts  # due-post publisher run by the cron tick
 src/lib/inbox.ts            # comment ingestion (polling + webhook), injectable
 src/lib/meta-webhook.ts     # webhook signature verify + event parsing (pure)
+src/lib/ai.ts               # AI reply drafts + sentiment (injectable LLM, pure prompts)
+src/lib/anthropic.ts        # Claude Haiku LLM (gated on ANTHROPIC_API_KEY)
 vercel.json                 # Vercel Cron schedule for /api/cron/publish-due
 src/app/                    # Next.js app router (pages + API routes)
 test/                       # Vitest suite

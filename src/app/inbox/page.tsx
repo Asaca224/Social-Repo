@@ -69,6 +69,23 @@ export default function InboxPage() {
     }
   }
 
+  // AI drafts a suggested reply (human still reviews and sends).
+  async function aiDraft(commentId: string) {
+    setError(null);
+    const res = await fetch(`/api/comments/${commentId}/ai-draft`, {
+      method: "POST",
+      headers: headers(),
+    });
+    if (res.ok) {
+      const { draft } = (await res.json()) as { draft: string };
+      setDrafts((d) => ({ ...d, [commentId]: draft }));
+    } else if (res.status === 503) {
+      setError("AI is not configured (set ANTHROPIC_API_KEY).");
+    } else {
+      setError(`AI draft failed (${res.status})`);
+    }
+  }
+
   return (
     <main style={{ maxWidth: 820, margin: "0 auto", padding: "32px 24px" }}>
       <h1 style={{ fontSize: 24 }}>Unified inbox</h1>
@@ -129,6 +146,9 @@ export default function InboxPage() {
                 onChange={(e) => setDrafts((d) => ({ ...d, [c.id]: e.target.value }))}
                 style={{ ...inputStyle, flex: 1 }}
               />
+              <button type="button" onClick={() => aiDraft(c.id)} style={btnStyle} title="AI draft (Claude Haiku)">
+                ✨ Draft
+              </button>
               <button type="button" onClick={() => sendReply(c.id)} disabled={!drafts[c.id]?.trim()} style={btnStyle}>
                 Reply
               </button>
