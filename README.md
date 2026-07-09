@@ -70,13 +70,16 @@ curl -X POST -H 'x-agency-id: <id>' -H 'content-type: application/json' \
   localhost:3000/api/posts/<postId>/transition
 ```
 
-Scheduled posts are published by a cron tick (`vercel.json` → `*/5 * * * *`)
-that hits `GET /api/cron/publish-due` with `Authorization: Bearer $CRON_SECRET`.
+Scheduled posts are published by a cron tick (`vercel.json`) that hits
+`GET /api/cron/publish-due` with `Authorization: Bearer $CRON_SECRET`. The
+schedules are **daily** because the free Vercel Hobby plan only allows daily
+cron jobs; on Pro (or the production worker tier) tighten them to `*/5 * * * *`
+for near-real-time publishing.
 
 The unified inbox ingests comments two ways: Meta posts to
 `/api/webhooks/meta` (verified with `META_APP_SECRET`; subscription handshake
-uses `META_WEBHOOK_VERIFY_TOKEN`), and a `*/15` cron polls
-`/api/cron/sync-comments` as a fallback. Reply, assign, and manage canned
+uses `META_WEBHOOK_VERIFY_TOKEN`), and a daily cron polls
+`/api/cron/sync-comments` as a fallback (Hobby-plan cron limit; tighten on Pro). Reply, assign, and manage canned
 responses via `/api/comments/[id]/reply`, `/api/comments/[id]/assign`, and
 `/api/canned-responses`.
 
