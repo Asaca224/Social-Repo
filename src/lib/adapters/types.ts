@@ -90,3 +90,16 @@ export class NotImplementedError extends Error {
     this.name = "NotImplementedError";
   }
 }
+
+/** Thrown when a platform API returns an error (or the request fails). */
+export class PlatformError extends Error {
+  constructor(
+    public readonly platform: Platform,
+    message: string,
+    public readonly status?: number,
+    public readonly platformCode?: number | string,
+  ) {
+    super(`${platform} API error: ${message}`);
+    this.name = "PlatformError";
+  }
+}

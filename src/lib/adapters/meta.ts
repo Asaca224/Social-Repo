@@ -10,18 +10,25 @@ import type {
   ReplyRequest,
   ReplyResult,
 } from "./types";
-import { NotImplementedError } from "./types";
+import { PlatformError } from "./types";
+
+interface GraphErrorBody {
+  error?: { message?: string; code?: number; type?: string };
+}
 
 /**
  * Meta (Facebook + Instagram) adapter — Phase 1 target platform.
  *
- * This is a STUB. The method bodies show the intended Graph API shape but do not
- * make live calls yet; wiring real requests (and OAuth token exchange) is the
- * first coding task of Phase 1 proper. Keeping the surface here lets the rest of
- * the app compile and depend on the adapter contract today.
+ * Makes live Facebook Graph API calls. Callers pass already-decrypted
+ * credentials (see src/lib/publish.ts); this class does pure platform I/O and
+ * never touches the database or tenancy.
+ *
+ * Note: `externalAccountId` is the Facebook Page id, and `accessToken` is the
+ * Page access token. Instagram publishing uses a different two-step flow and is
+ * added when the IG account link lands; for now `instagram` targets are routed
+ * here for the shared Graph plumbing but publish via the Page.
  */
 export class MetaAdapter implements PlatformAdapter {
-  // Covers both Facebook Pages and Instagram business accounts via Graph API.
   readonly platform = "facebook" as const;
 
   private get graphBaseUrl(): string {
@@ -29,37 +36,149 @@ export class MetaAdapter implements PlatformAdapter {
     return `https://graph.facebook.com/${META_GRAPH_API_VERSION}`;
   }
 
+  /** Low-level Graph request. Throws {@link PlatformError} on any failure. */
+  private async graph<T>(
+    path: string,
+    init: { method: "GET" | "POST"; accessToken: string; params?: Record<string, string> },
+  ): Promise<T> {
+    const url = new URL(`${this.graphBaseUrl}/${path.replace(/^\//, "")}`);
+    const params = { access_token: init.accessToken, ...(init.params ?? {}) };
+
+    let res: Response;
+    try {
+      if (init.method === "GET") {
+        for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+        res = await fetch(url, { method: "GET" });
+      } else {
+        const form = new URLSearchParams(params);
+        res = await fetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: form,
+        });
+      }
+    } catch (err) {
+      throw new PlatformError(
+        this.platform,
+        err instanceof Error ? err.message : "network request failed",
+      );
+    }
+
+    const body = (await res.json().catch(() => ({}))) as T & GraphErrorBody;
+    if (!res.ok || body.error) {
+      throw new PlatformError(
+        this.platform,
+        body.error?.message ?? `HTTP ${res.status}`,
+        res.status,
+        body.error?.code,
+      );
+    }
+    return body as T;
+  }
+
   async publishPost(
-    _creds: AdapterCredentials,
-    _request: PublishRequest,
+    creds: AdapterCredentials,
+    request: PublishRequest,
   ): Promise<PublishResult> {
-    // Real impl: POST {graphBaseUrl}/{pageId}/feed (FB) or the two-step
-    // /media + /media_publish flow (IG), authenticated with the page token.
-    throw new NotImplementedError(this.platform, "publishPost");
+    const pageId = creds.externalAccountId;
+
+    // Single image → /photos with a caption; text/link → /feed.
+    if (request.mediaUrls.length === 1) {
+      const photo = request.mediaUrls[0] as string;
+      const result = await this.graph<{ id: string; post_id?: string }>(
+        `${pageId}/photos`,
+        {
+          method: "POST",
+          accessToken: creds.accessToken,
+          params: { url: photo, caption: request.content },
+        },
+      );
+      return { platformPostId: result.post_id ?? result.id };
+    }
+
+    const result = await this.graph<{ id: string }>(`${pageId}/feed`, {
+      method: "POST",
+      accessToken: creds.accessToken,
+      params: { message: request.content },
+    });
+    return { platformPostId: result.id };
   }
 
   async fetchComments(
-    _creds: AdapterCredentials,
-    _since?: Date,
+    creds: AdapterCredentials,
+    since?: Date,
   ): Promise<FetchedComment[]> {
-    // Real impl: GET {graphBaseUrl}/{objectId}/comments, or ingest via the
-    // Meta webhook subscription where available.
-    throw new NotImplementedError(this.platform, "fetchComments");
+    const params: Record<string, string> = {
+      fields: "id,from{name},message,created_time",
+    };
+    if (since) params.since = Math.floor(since.getTime() / 1000).toString();
+
+    const result = await this.graph<{
+      data?: Array<{
+        id: string;
+        from?: { name?: string };
+        message?: string;
+        created_time?: string;
+      }>;
+    }>(`${creds.externalAccountId}/comments`, {
+      method: "GET",
+      accessToken: creds.accessToken,
+      params,
+    });
+
+    return (result.data ?? []).map((c) => ({
+      platformCommentId: c.id,
+      authorName: c.from?.name ?? "Unknown",
+      body: c.message ?? "",
+      receivedAt: c.created_time ? new Date(c.created_time) : new Date(),
+    }));
   }
 
   async replyToComment(
-    _creds: AdapterCredentials,
-    _request: ReplyRequest,
+    creds: AdapterCredentials,
+    request: ReplyRequest,
   ): Promise<ReplyResult> {
-    // Real impl: POST {graphBaseUrl}/{commentId}/comments with the reply body.
-    throw new NotImplementedError(this.platform, "replyToComment");
+    const result = await this.graph<{ id: string }>(
+      `${request.platformCommentId}/comments`,
+      {
+        method: "POST",
+        accessToken: creds.accessToken,
+        params: { message: request.body },
+      },
+    );
+    return { platformReplyId: result.id };
   }
 
   async fetchAnalytics(
-    _creds: AdapterCredentials,
-    _range: DateRange,
+    creds: AdapterCredentials,
+    range: DateRange,
   ): Promise<AnalyticsPoint[]> {
-    // Real impl: GET {graphBaseUrl}/{objectId}/insights with metric + period.
-    throw new NotImplementedError(this.platform, "fetchAnalytics");
+    const result = await this.graph<{
+      data?: Array<{
+        name: string;
+        values?: Array<{ value: number; end_time?: string }>;
+      }>;
+    }>(`${creds.externalAccountId}/insights`, {
+      method: "GET",
+      accessToken: creds.accessToken,
+      params: {
+        metric: "page_impressions,page_fans",
+        since: Math.floor(range.from.getTime() / 1000).toString(),
+        until: Math.floor(range.to.getTime() / 1000).toString(),
+      },
+    });
+
+    // Fold the metric-oriented Graph response into date-oriented points.
+    const byDate = new Map<string, AnalyticsPoint>();
+    for (const metric of result.data ?? []) {
+      for (const v of metric.values ?? []) {
+        const key = (v.end_time ?? new Date().toISOString()).slice(0, 10);
+        const point = byDate.get(key) ?? { date: new Date(key) };
+        if (metric.name === "page_impressions") point.impressions = v.value;
+        if (metric.name === "page_fans") point.followers = v.value;
+        byDate.set(key, point);
+      }
+    }
+    return [...byDate.values()];
   }
 }

@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
@@ -31,7 +32,8 @@
     "eslint": "^8.57.0",
     "eslint-config-next": "^14.2.15",
     "prisma": "^5.22.0",
-    "typescript": "^5.5.3"
+    "typescript": "^5.5.3",
+    "vitest": "^2.1.9"
   },
   "engines": {
     "node": ">=18.18"
