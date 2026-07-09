@@ -2,7 +2,8 @@ import { z } from "zod";
 import { Platform } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { assertClientInTenant, TenantAccessError } from "@/lib/tenancy";
-import { errorResponse, json, resolveTenant, zodErrorResponse } from "@/lib/api";
+import { errorResponse, json, zodErrorResponse } from "@/lib/api";
+import { resolveTenant } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ const platformEnum = z.nativeEnum(Platform);
 
 /** List posts for a client (workspace) within the current agency. */
 export async function GET(request: Request) {
-  const ctx = resolveTenant(request);
+  const ctx = await resolveTenant(request);
   if (!ctx) return errorResponse("Missing agency context", 401);
 
   const clientId = new URL(request.url).searchParams.get("clientId");
@@ -44,7 +45,7 @@ const createPostSchema = z.object({
  * persists the draft after verifying the client belongs to the tenant.
  */
 export async function POST(request: Request) {
-  const ctx = resolveTenant(request);
+  const ctx = await resolveTenant(request);
   if (!ctx) return errorResponse("Missing agency context", 401);
 
   const body = await request.json().catch(() => null);

@@ -13,6 +13,11 @@ const envSchema = z.object({
   META_APP_SECRET: z.string().optional(),
   META_GRAPH_API_VERSION: z.string().default("v21.0"),
 
+  // Auth (Clerk). Optional: when unset, the app falls back to the
+  // x-agency-id header (see src/lib/auth.ts).
+  CLERK_SECRET_KEY: z.string().optional(),
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
+
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),

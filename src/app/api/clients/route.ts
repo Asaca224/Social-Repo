@@ -2,13 +2,14 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { clientScope } from "@/lib/tenancy";
-import { errorResponse, json, resolveTenant, zodErrorResponse } from "@/lib/api";
+import { errorResponse, json, zodErrorResponse } from "@/lib/api";
+import { resolveTenant } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 /** List clients (workspaces) for the current agency. */
 export async function GET(request: Request) {
-  const ctx = resolveTenant(request);
+  const ctx = await resolveTenant(request);
   if (!ctx) return errorResponse("Missing agency context", 401);
 
   const clients = await prisma.client.findMany({
@@ -26,7 +27,7 @@ const createClientSchema = z.object({
 
 /** Create a client workspace under the current agency. */
 export async function POST(request: Request) {
-  const ctx = resolveTenant(request);
+  const ctx = await resolveTenant(request);
   if (!ctx) return errorResponse("Missing agency context", 401);
 
   const body = await request.json().catch(() => null);

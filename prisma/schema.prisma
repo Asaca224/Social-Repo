@@ -76,6 +76,8 @@ model Agency {
   name            String
   planTier        String   @default("free") @map("plan_tier")
   stripeCustomerId String? @map("stripe_customer_id")
+  // Clerk Organization id — the tenant key when Clerk auth is enabled.
+  clerkOrgId      String?  @unique @map("clerk_org_id")
   createdAt       DateTime @default(now()) @map("created_at")
 
   users        User[]
@@ -86,11 +88,13 @@ model Agency {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  agencyId  String   @map("agency_id")
-  email     String
-  role      UserRole @default(manager)
-  createdAt DateTime @default(now()) @map("created_at")
+  id          String   @id @default(cuid())
+  agencyId    String   @map("agency_id")
+  email       String
+  role        UserRole @default(manager)
+  // Clerk user id, when Clerk auth is enabled.
+  clerkUserId String?  @unique @map("clerk_user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
 
   agency        Agency         @relation(fields: [agencyId], references: [id], onDelete: Cascade)
   clientUsers   ClientUser[]

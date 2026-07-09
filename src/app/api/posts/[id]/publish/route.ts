@@ -3,7 +3,8 @@ import { getAdapter } from "@/lib/adapters";
 import { decryptToken } from "@/lib/crypto";
 import { publishPost } from "@/lib/publish";
 import { prismaPublishStore } from "@/lib/publish-store";
-import { errorResponse, json, resolveTenant } from "@/lib/api";
+import { errorResponse, json } from "@/lib/api";
+import { resolveTenant } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export async function POST(
   request: Request,
   { params }: { params: { id: string } },
 ) {
-  const ctx = resolveTenant(request);
+  const ctx = await resolveTenant(request);
   if (!ctx) return errorResponse("Missing agency context", 401);
 
   const outcome = await publishPost(params.id, {

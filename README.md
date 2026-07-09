@@ -8,11 +8,12 @@ Think Hootsuite / Sprout Social, but purpose-built: Node.js, AI-assisted triage,
 
 ## Status
 
-**Phase 1 — Foundation + manual publish.** A running Next.js app with the full
-Prisma data model, the `PlatformAdapter` interface with a **live Meta (FB/IG)
-adapter**, at-rest token encryption, tenant-scoping helpers, and an end-to-end
-**manual publish** flow (connect account → draft post → publish to target
-platforms). Auth (Clerk) and scheduling (BullMQ) are the next phases — see the
+**Phase 1 — Foundation + manual publish + auth.** A running Next.js app with the
+full Prisma data model, the `PlatformAdapter` interface with a **live Meta
+(FB/IG) adapter**, at-rest token encryption, tenant-scoping helpers, an
+end-to-end **manual publish** flow (connect account → draft post → publish to
+target platforms), and **Clerk auth** (gated — falls back to a header in dev).
+Scheduling (BullMQ) and the content calendar are the next phase — see the
 [roadmap](docs/roadmap.md).
 
 ## Getting started
@@ -55,8 +56,11 @@ curl -X POST -H 'x-agency-id: <id>' localhost:3000/api/posts/<postId>/publish
 Run the tests with `npm test` (Vitest — crypto, publish orchestration, and the
 Meta adapter, all with fakes/mocked `fetch`, no network or DB needed).
 
-> Tenant resolution currently reads an `x-agency-id` header as a placeholder for
-> the Clerk session that lands in a later phase (see `src/lib/api.ts`).
+> **Auth is gated on configuration.** Set `CLERK_SECRET_KEY` +
+> `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and requests authenticate via Clerk — the
+> tenant is the Clerk Organization mapped to an `Agency` (`Agency.clerkOrgId`).
+> With those unset, the app falls back to trusting an `x-agency-id` header for
+> local dev / CI. See `src/lib/auth.ts` and `src/middleware.ts`.
 
 ## Layout
 
@@ -66,6 +70,8 @@ src/lib/db.ts               # Prisma client singleton
 src/lib/crypto.ts           # AES-256-GCM token encryption at rest
 src/lib/env.ts              # zod-validated environment
 src/lib/tenancy.ts          # multi-tenant scoping helpers
+src/lib/auth.ts             # tenant resolution (Clerk org -> agency, header fallback)
+src/middleware.ts           # gated Clerk middleware (pass-through when unconfigured)
 src/lib/adapters/           # PlatformAdapter interface + live Meta adapter + registry
 src/lib/publish.ts          # manual-publish orchestrator (injectable, unit-tested)
 src/lib/publish-store.ts    # Prisma-backed, tenant-scoped store for the orchestrator

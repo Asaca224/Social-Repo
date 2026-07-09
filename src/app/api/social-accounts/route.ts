@@ -3,13 +3,14 @@ import { Platform } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { encryptToken } from "@/lib/crypto";
 import { assertClientInTenant, TenantAccessError } from "@/lib/tenancy";
-import { errorResponse, json, resolveTenant, zodErrorResponse } from "@/lib/api";
+import { errorResponse, json, zodErrorResponse } from "@/lib/api";
+import { resolveTenant } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 /** List a client's connected accounts (never returns tokens). */
 export async function GET(request: Request) {
-  const ctx = resolveTenant(request);
+  const ctx = await resolveTenant(request);
   if (!ctx) return errorResponse("Missing agency context", 401);
 
   const clientId = new URL(request.url).searchParams.get("clientId");
@@ -52,7 +53,7 @@ const connectSchema = z.object({
  * this endpoint accepts them directly so the publish flow is exercisable now.
  */
 export async function POST(request: Request) {
-  const ctx = resolveTenant(request);
+  const ctx = await resolveTenant(request);
   if (!ctx) return errorResponse("Missing agency context", 401);
 
   const body = await request.json().catch(() => null);
