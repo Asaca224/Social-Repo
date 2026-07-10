@@ -1,3 +1,4 @@
+import "./env-normalize";
 import { Prisma, PrismaClient } from "@prisma/client";
 
 /**

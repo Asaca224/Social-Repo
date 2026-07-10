@@ -1,3 +1,4 @@
+import "./env-normalize";
 import { z } from "zod";
 
 /**

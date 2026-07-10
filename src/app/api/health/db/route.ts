@@ -11,6 +11,16 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const hasUrl = Boolean(process.env.DATABASE_URL);
   const hasEncryptionKey = Boolean(process.env.TOKEN_ENCRYPTION_KEY);
+  // Which DB-related vars are actually present (names only, never values).
+  const present = Object.fromEntries(
+    [
+      "DATABASE_URL",
+      "POSTGRES_PRISMA_URL",
+      "POSTGRES_URL",
+      "POSTGRES_URL_NON_POOLING",
+      "DATABASE_URL_UNPOOLED",
+    ].map((k) => [k, Boolean(process.env[k])]),
+  );
 
   if (!hasUrl) {
     return json(
@@ -18,7 +28,8 @@ export async function GET() {
         db: "misconfigured",
         DATABASE_URL: false,
         TOKEN_ENCRYPTION_KEY: hasEncryptionKey,
-        hint: "DATABASE_URL is not set on this deployment. Add it in Vercel for this environment (Production AND Preview), then redeploy.",
+        presentEnvVars: present,
+        hint: "No database URL found. Add a DATABASE_URL var in Vercel for this environment (Production AND Preview) and redeploy. If you connected the Neon/Vercel Postgres integration, the app now also accepts POSTGRES_PRISMA_URL / POSTGRES_URL automatically — redeploy to pick it up.",
       },
       { status: 503 },
     );
@@ -30,6 +41,7 @@ export async function GET() {
       db: "ok",
       DATABASE_URL: true,
       TOKEN_ENCRYPTION_KEY: hasEncryptionKey,
+      presentEnvVars: present,
     });
   } catch (err) {
     if (isDatabaseUnavailable(err)) {
