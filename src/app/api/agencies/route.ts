@@ -1,7 +1,11 @@
 import { z } from "zod";
-import { prisma } from "@/lib/db";
+import { prisma, isDatabaseUnavailable } from "@/lib/db";
 import { errorResponse, json, zodErrorResponse } from "@/lib/api";
 import { isClerkEnabled } from "@/lib/auth";
+
+const DB_SETUP_MESSAGE =
+  "Database not reachable. Set DATABASE_URL and apply the schema with " +
+  "`npx prisma migrate deploy`, then try again.";
 
 export const dynamic = "force-dynamic";
 
@@ -28,16 +32,20 @@ export async function POST(request: Request) {
   const parsed = createSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return zodErrorResponse(parsed.error);
 
-  const agency = await prisma.agency.create({
-    data: {
-      name: parsed.data.name,
-      users: { create: { email: parsed.data.adminEmail, role: "admin" } },
-    },
-    select: { id: true, name: true, users: { select: { id: true, email: true } } },
-  });
-
-  return json(
-    { agencyId: agency.id, name: agency.name, adminUserId: agency.users[0]?.id },
-    { status: 201 },
-  );
+  try {
+    const agency = await prisma.agency.create({
+      data: {
+        name: parsed.data.name,
+        users: { create: { email: parsed.data.adminEmail, role: "admin" } },
+      },
+      select: { id: true, name: true, users: { select: { id: true, email: true } } },
+    });
+    return json(
+      { agencyId: agency.id, name: agency.name, adminUserId: agency.users[0]?.id },
+      { status: 201 },
+    );
+  } catch (err) {
+    if (isDatabaseUnavailable(err)) return errorResponse(DB_SETUP_MESSAGE, 503);
+    throw err;
+  }
 }

@@ -31,6 +31,27 @@ npm run prisma:migrate      # create the schema in your database
 npm run dev                 # http://localhost:3000
 ```
 
+### Connecting a database (required)
+
+Every feature reads/writes Postgres, so the app needs a database before
+anything works — creating an agency, adding clients, etc. Without one you'll see
+a clear "Database not reachable" message.
+
+1. **Provision Postgres** (Neon is the MVP target). The quickest path on Vercel
+   is the **Neon integration** (Vercel → Storage → add Neon), which sets
+   `DATABASE_URL` automatically. Otherwise copy your Neon connection string.
+2. **Set env vars** (locally in `.env`, and in Vercel → Settings → Environment
+   Variables):
+   - `DATABASE_URL` — your Postgres/Neon connection string
+   - `TOKEN_ENCRYPTION_KEY` — generate with
+     `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`
+3. **Apply the schema** to that database:
+   ```bash
+   DATABASE_URL="postgres://…" npm run db:deploy   # runs prisma migrate deploy
+   ```
+   (Migrations live in `prisma/migrations/`.)
+4. **Redeploy** on Vercel so the new env vars take effect.
+
 ### Managing customers & accounts (the dashboard)
 
 Open **`/dashboard`** — the agency console:

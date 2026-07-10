@@ -58,7 +58,13 @@ function Onboarding() {
       setError("Clerk is enabled — agencies come from your Clerk organization.");
       return;
     }
-    if (!res.ok) return setError(`Create agency failed (${res.status})`);
+    if (!res.ok) {
+      const detail = await res
+        .json()
+        .then((d: { error?: string }) => d.error)
+        .catch(() => null);
+      return setError(detail ?? `Create agency failed (${res.status})`);
+    }
     const { agencyId, adminUserId } = (await res.json()) as {
       agencyId: string;
       adminUserId?: string;
