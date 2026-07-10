@@ -44,17 +44,26 @@ export async function GET() {
       presentEnvVars: present,
     });
   } catch (err) {
+    // Surface the Prisma error code + first line of the message (never the
+    // password — Prisma messages don't include it) to pinpoint the cause:
+    // P1000 auth failed, P1001 can't reach host, P1003 db doesn't exist, etc.
+    const code = (err as { code?: string })?.code ?? null;
+    const detail =
+      err instanceof Error ? err.message.split("\n").slice(0, 3).join(" ").slice(0, 300) : null;
     if (isDatabaseUnavailable(err)) {
       return json(
         {
           db: "unreachable",
           DATABASE_URL: true,
           TOKEN_ENCRYPTION_KEY: hasEncryptionKey,
-          hint: "DATABASE_URL is set but the database can't be reached or has no tables. Check the value and that migrations ran.",
+          presentEnvVars: present,
+          code,
+          detail,
+          hint: "DATABASE_URL is set but the query failed. P1000=bad credentials, P1001=host unreachable, P1003=database name wrong. Neon tip: drop `channel_binding=require` from the string, keep `sslmode=require`.",
         },
         { status: 503 },
       );
     }
-    return errorResponse("Unexpected error", 500);
+    return json({ db: "error", code, detail }, { status: 500 });
   }
 }
