@@ -27,8 +27,25 @@ and polish (Phase 6) remain — see the [roadmap](docs/roadmap.md).
 ```bash
 npm install                 # also runs `prisma generate`
 cp .env.example .env        # fill in DATABASE_URL + TOKEN_ENCRYPTION_KEY
+npm run prisma:migrate      # create the schema in your database
 npm run dev                 # http://localhost:3000
 ```
+
+### Managing customers & accounts (the dashboard)
+
+Open **`/dashboard`** — the agency console:
+
+1. **Create your agency** (the top-level tenant — you / your team). In dev this
+   also creates a first admin user and remembers the agency id in the browser.
+   With Clerk enabled, the agency comes from your Clerk Organization instead.
+2. **Add clients** (your customers / workspaces) in the left panel.
+3. **Select a client → Connect account.** Pick a platform, paste the platform
+   account id (e.g. a Facebook Page ID, X user ID, or LinkedIn author URN) and an
+   access token. The token is **encrypted at rest**. A one-click OAuth flow is a
+   planned enhancement — for now you paste an id + token.
+4. From a selected client, jump to the composer, calendar, inbox, or generate a
+   white-labeled report. The plan's `accounts_limit` caps how many accounts you
+   can connect (upgrade in **Billing**).
 
 Useful scripts:
 
