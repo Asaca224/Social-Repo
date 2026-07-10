@@ -50,14 +50,22 @@ function OAuthResultBanner() {
     const params = new URLSearchParams(window.location.search);
     const oauth = params.get("oauth");
     if (!oauth) return;
+    const provider = params.get("provider") === "tiktok" ? "TikTok" : "Meta";
+    const envHint =
+      provider === "TikTok"
+        ? "set TIKTOK_CLIENT_KEY / TIKTOK_CLIENT_SECRET"
+        : "set META_APP_ID / META_APP_SECRET";
     const map: Record<string, { ok: boolean; text: string }> = {
-      connected: { ok: true, text: `Connected ${params.get("count") ?? ""} account(s) via Meta.` },
-      denied: { ok: false, text: "Meta authorization was cancelled." },
-      notconfigured: { ok: false, text: "Meta OAuth isn't configured (set META_APP_ID / META_APP_SECRET)." },
+      connected: { ok: true, text: `Connected ${params.get("count") ?? ""} account(s) via ${provider}.` },
+      denied: { ok: false, text: `${provider} authorization was cancelled.` },
+      notconfigured: {
+        ok: false,
+        text: `${provider} isn't set up yet — an admin needs to ${envHint} in the app's environment (Vercel), then redeploy.`,
+      },
       noagency: { ok: false, text: "Couldn't determine your agency for the OAuth flow." },
       noclient: { ok: false, text: "That client wasn't found for OAuth." },
       badstate: { ok: false, text: "OAuth state was invalid or expired — please retry." },
-      error: { ok: false, text: "Something went wrong connecting via Meta." },
+      error: { ok: false, text: `Something went wrong connecting via ${provider}.` },
     };
     setMsg(map[oauth] ?? null);
     // Strip the query so a refresh doesn't re-show it.

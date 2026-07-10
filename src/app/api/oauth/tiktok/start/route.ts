@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
 /** Begin the TikTok OAuth flow: verify the client, sign state, redirect. */
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const back = (params: string) => NextResponse.redirect(new URL(`/dashboard?${params}`, request.url));
+  const back = (params: string) =>
+    NextResponse.redirect(new URL(`/dashboard?provider=tiktok&${params}`, request.url));
 
   if (!tiktokOAuthConfigured()) return back("oauth=notconfigured");
 

@@ -16,7 +16,8 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const back = (params: string) => NextResponse.redirect(new URL(`/dashboard?${params}`, request.url));
+  const back = (params: string) =>
+    NextResponse.redirect(new URL(`/dashboard?provider=meta&${params}`, request.url));
 
   if (!metaOAuthConfigured()) return back("oauth=notconfigured");
 
