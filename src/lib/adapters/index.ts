@@ -1,5 +1,6 @@
 import type { Platform } from "@prisma/client";
 import { MetaAdapter } from "./meta";
+import { InstagramAdapter } from "./instagram";
 import { XAdapter } from "./x";
 import { LinkedInAdapter } from "./linkedin";
 import type { PlatformAdapter } from "./types";
@@ -8,14 +9,12 @@ export * from "./types";
 
 /**
  * Registry mapping each Platform enum value to its adapter instance.
- * Meta (facebook/instagram), X, and LinkedIn are wired; TikTok and Google
- * Business follow as their adapters land (see docs/roadmap.md).
+ * Facebook, Instagram (own two-step publish flow), X, and LinkedIn are wired;
+ * TikTok and Google Business follow as their adapters land (docs/roadmap.md).
  */
-const meta = new MetaAdapter();
-
 const registry: Partial<Record<Platform, PlatformAdapter>> = {
-  facebook: meta,
-  instagram: meta,
+  facebook: new MetaAdapter(),
+  instagram: new InstagramAdapter(),
   x: new XAdapter(),
   linkedin: new LinkedInAdapter(),
 };

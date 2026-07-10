@@ -39,6 +39,14 @@ enum SocialAccountStatus {
   disconnected
 }
 
+// Professional account type (Instagram, and forward-compatible for others).
+// Personal is representable but unsupported for management via platform APIs.
+enum SocialAccountType {
+  business
+  creator
+  personal
+}
+
 enum PostStatus {
   draft
   pending_approval
@@ -162,6 +170,9 @@ model SocialAccount {
   clientId          String              @map("client_id")
   platform          Platform
   externalAccountId String              @map("external_account_id")
+  // For Instagram/professional accounts: business or creator (personal is
+  // unsupported by the platform APIs). Null for platforms where it's N/A.
+  accountType       SocialAccountType?  @map("account_type")
   // Encrypted at rest (AES-256-GCM). Never store raw tokens.
   accessToken       String?             @map("access_token")
   refreshToken      String?             @map("refresh_token")

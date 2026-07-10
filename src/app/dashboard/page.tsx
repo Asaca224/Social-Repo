@@ -8,12 +8,13 @@ interface Account {
   id: string;
   platform: string;
   externalAccountId: string;
+  accountType: string | null;
   status: string;
 }
 
 const PLATFORMS: { value: string; label: string; hint: string }[] = [
   { value: "facebook", label: "Facebook", hint: "Facebook Page ID" },
-  { value: "instagram", label: "Instagram", hint: "Instagram business account ID" },
+  { value: "instagram", label: "Instagram", hint: "Instagram Business/Creator account ID (IG user id)" },
   { value: "x", label: "X (Twitter)", hint: "X user ID" },
   { value: "linkedin", label: "LinkedIn", hint: "Author URN, e.g. urn:li:person:xxxx" },
   { value: "tiktok", label: "TikTok", hint: "TikTok account ID" },
@@ -156,8 +157,12 @@ function AccountsPanel() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [platform, setPlatform] = useState(PLATFORMS[0]!.value);
+  const [accountType, setAccountType] = useState("business");
   const [externalAccountId, setExternalAccountId] = useState("");
   const [accessToken, setAccessToken] = useState("");
+
+  const isInstagram = platform === "instagram";
+  const personalBlocked = isInstagram && accountType === "personal";
 
   const clientId = selectedClient?.id;
 
@@ -177,13 +182,22 @@ function AccountsPanel() {
     setError(null);
     const res = await api("/api/social-accounts", {
       method: "POST",
-      body: JSON.stringify({ clientId, platform, externalAccountId, accessToken }),
+      body: JSON.stringify({
+        clientId,
+        platform,
+        externalAccountId,
+        accessToken,
+        ...(isInstagram ? { accountType } : {}),
+      }),
     });
     if (res.status === 402) {
       setError("Account limit reached — upgrade your plan in Billing to connect more.");
       return;
     }
-    if (!res.ok) return setError(`Connect failed (${res.status})`);
+    if (!res.ok) {
+      const detail = await res.json().then((d: { error?: string }) => d.error).catch(() => null);
+      return setError(detail ?? `Connect failed (${res.status})`);
+    }
     setExternalAccountId("");
     setAccessToken("");
     await load();
@@ -234,6 +248,7 @@ function AccountsPanel() {
               <li key={a.id} className="list-row">
                 <span>
                   <strong style={{ textTransform: "capitalize" }}>{a.platform}</strong>{" "}
+                  {a.accountType && <span className="badge" style={{ marginRight: 6 }}>{a.accountType}</span>}
                   <span className="muted small">{a.externalAccountId}</span>
                 </span>
                 <span className={`badge ${a.status === "connected" ? "badge-success" : "badge-warn"}`}>
@@ -255,6 +270,23 @@ function AccountsPanel() {
               ))}
             </select>
           </div>
+          {isInstagram && (
+            <div>
+              <label className="label">Account type</label>
+              <select className="select" value={accountType} onChange={(e) => setAccountType(e.target.value)}>
+                <option value="business">Business</option>
+                <option value="creator">Creator</option>
+                <option value="personal">Personal</option>
+              </select>
+              {personalBlocked && (
+                <div className="alert" style={{ marginTop: 8, background: "var(--warn-soft)", color: "var(--warn)" }}>
+                  Instagram personal accounts have no API and can&apos;t be connected. In the
+                  Instagram app: <strong>Settings → Account type and tools → Switch to
+                  professional account</strong> (Business or Creator), then reconnect.
+                </div>
+              )}
+            </div>
+          )}
           <div>
             <label className="label">Account id</label>
             <input className="input" placeholder={hint} value={externalAccountId} onChange={(e) => setExternalAccountId(e.target.value)} />
@@ -263,7 +295,7 @@ function AccountsPanel() {
             <label className="label">Access token</label>
             <input className="input" placeholder="Stored encrypted at rest" value={accessToken} onChange={(e) => setAccessToken(e.target.value)} />
           </div>
-          <button className="btn btn-primary" disabled={!externalAccountId || !accessToken} onClick={connect}>
+          <button className="btn btn-primary" disabled={!externalAccountId || !accessToken || personalBlocked} onClick={connect}>
             Connect account
           </button>
           <div className="muted small">

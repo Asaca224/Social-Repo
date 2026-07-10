@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Platform } from "@prisma/client";
+import { Platform, SocialAccountType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { encryptToken } from "@/lib/crypto";
 import { assertClientInTenant, TenantAccessError } from "@/lib/tenancy";
@@ -30,6 +30,7 @@ export async function GET(request: Request) {
       id: true,
       platform: true,
       externalAccountId: true,
+      accountType: true,
       status: true,
       tokenExpiresAt: true,
       createdAt: true,
@@ -43,6 +44,7 @@ const connectSchema = z.object({
   clientId: z.string().min(1),
   platform: z.nativeEnum(Platform),
   externalAccountId: z.string().min(1),
+  accountType: z.nativeEnum(SocialAccountType).optional(),
   accessToken: z.string().min(1),
   refreshToken: z.string().min(1).optional(),
   tokenExpiresAt: z.string().datetime().optional(),
@@ -62,6 +64,24 @@ export async function POST(request: Request) {
   if (!parsed.success) return zodErrorResponse(parsed.error);
 
   const data = parsed.data;
+
+  // Instagram requires a Professional (Business or Creator) account. Personal
+  // accounts have no management/publishing API, so reject with guidance.
+  if (data.platform === "instagram") {
+    if (data.accountType === "personal") {
+      return errorResponse(
+        "Instagram personal accounts can't be connected — the platform has no API for them. In the Instagram app: Settings → Account type and tools → Switch to professional account (Business or Creator), then reconnect.",
+        422,
+      );
+    }
+    if (data.accountType !== "business" && data.accountType !== "creator") {
+      return errorResponse(
+        "Instagram requires an account type of 'business' or 'creator'.",
+        422,
+      );
+    }
+  }
+
   try {
     await assertClientInTenant(ctx, data.clientId);
   } catch (err) {
@@ -109,18 +129,20 @@ export async function POST(request: Request) {
       clientId: data.clientId,
       platform: data.platform,
       externalAccountId: data.externalAccountId,
+      accountType: data.accountType ?? null,
       accessToken: encryptToken(data.accessToken),
       refreshToken: data.refreshToken ? encryptToken(data.refreshToken) : null,
       tokenExpiresAt: data.tokenExpiresAt ? new Date(data.tokenExpiresAt) : null,
       status: "connected",
     },
     update: {
+      accountType: data.accountType ?? null,
       accessToken: encryptToken(data.accessToken),
       refreshToken: data.refreshToken ? encryptToken(data.refreshToken) : null,
       tokenExpiresAt: data.tokenExpiresAt ? new Date(data.tokenExpiresAt) : null,
       status: "connected",
     },
-    select: { id: true, platform: true, externalAccountId: true, status: true },
+    select: { id: true, platform: true, externalAccountId: true, accountType: true, status: true },
   });
   return json({ account }, { status: 201 });
 }

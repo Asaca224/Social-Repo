@@ -64,6 +64,12 @@ Open **`/dashboard`** — the agency console:
    account id (e.g. a Facebook Page ID, X user ID, or LinkedIn author URN) and an
    access token. The token is **encrypted at rest**. A one-click OAuth flow is a
    planned enhancement — for now you paste an id + token.
+   - **Instagram** requires a **Professional** account — pick **Business** or
+     **Creator**. Personal accounts have no management/publishing API (Meta
+     retired the Basic Display API in Dec 2024) and are rejected with guidance to
+     switch to Professional (free/instant in the IG app). The id is the Instagram
+     *user id* (the IG account linked to a Facebook Page), and Instagram publishes
+     via its own two-step media → media_publish flow (image/caption).
 4. From a selected client, jump to the composer, calendar, inbox, or generate a
    white-labeled report. The plan's `accounts_limit` caps how many accounts you
    can connect (upgrade in **Billing**).
