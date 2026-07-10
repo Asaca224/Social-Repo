@@ -1,0 +1,295 @@
+// SocialOps data model.
+// See docs/data-model.md for the narrative version and relationships.
+//
+// Tenancy: Agency -> Client (workspace) -> SocialAccount.
+// Tokens (access/refresh) are stored encrypted at rest; see src/lib/crypto.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  admin
+  manager
+  client_viewer
+  client_approver
+}
+
+enum Platform {
+  instagram
+  facebook
+  x
+  linkedin
+  tiktok
+  google_business
+}
+
+enum SocialAccountStatus {
+  connected
+  needs_reauth
+  disconnected
+}
+
+// Professional account type (Instagram, and forward-compatible for others).
+// Personal is representable but unsupported for management via platform APIs.
+enum SocialAccountType {
+  business
+  creator
+  personal
+}
+
+enum PostStatus {
+  draft
+  pending_approval
+  approved
+  scheduled
+  published
+  failed
+}
+
+enum Sentiment {
+  positive
+  neutral
+  negative
+}
+
+enum CommentStatus {
+  open
+  replied
+  ignored
+}
+
+enum SubscriptionStatus {
+  active
+  past_due
+  canceled
+  trialing
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy: Agency -> Users / Clients / Subscription
+// ---------------------------------------------------------------------------
+
+model Agency {
+  id              String   @id @default(cuid())
+  name            String
+  planTier        String   @default("free") @map("plan_tier")
+  stripeCustomerId String? @map("stripe_customer_id")
+  // Clerk Organization id — the tenant key when Clerk auth is enabled.
+  clerkOrgId      String?  @unique @map("clerk_org_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  users        User[]
+  clients      Client[]
+  subscription Subscription?
+
+  @@map("agencies")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  agencyId    String   @map("agency_id")
+  email       String
+  role        UserRole @default(manager)
+  // Clerk user id, when Clerk auth is enabled.
+  clerkUserId String?  @unique @map("clerk_user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  agency        Agency         @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  clientUsers   ClientUser[]
+  createdPosts  Post[]         @relation("PostCreatedBy")
+  assignedComments Comment[]   @relation("CommentAssignee")
+  sentReplies   Reply[]        @relation("ReplySentBy")
+
+  @@unique([agencyId, email])
+  @@index([agencyId])
+  @@map("users")
+}
+
+model Client {
+  id             String   @id @default(cuid())
+  agencyId       String   @map("agency_id")
+  name           String
+  brandingConfig Json?    @map("branding_config")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  agency          Agency           @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  socialAccounts  SocialAccount[]
+  posts           Post[]
+  clientUsers     ClientUser[]
+  cannedResponses CannedResponse[]
+
+  @@index([agencyId])
+  @@map("clients")
+}
+
+// Saved replies per client, used from the unified inbox.
+model CannedResponse {
+  id        String   @id @default(cuid())
+  clientId  String   @map("client_id")
+  title     String
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("canned_responses")
+}
+
+// Client-side portal access: joins a portal User to a Client workspace.
+model ClientUser {
+  id              String   @id @default(cuid())
+  clientId        String   @map("client_id")
+  userId          String   @map("user_id")
+  permissionLevel String   @map("permission_level") // e.g. "view_only" | "approve_only"
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, userId])
+  @@index([userId])
+  @@map("client_users")
+}
+
+// ---------------------------------------------------------------------------
+// Connected accounts
+// ---------------------------------------------------------------------------
+
+model SocialAccount {
+  id                String              @id @default(cuid())
+  clientId          String              @map("client_id")
+  platform          Platform
+  externalAccountId String              @map("external_account_id")
+  // For Instagram/professional accounts: business or creator (personal is
+  // unsupported by the platform APIs). Null for platforms where it's N/A.
+  accountType       SocialAccountType?  @map("account_type")
+  // Encrypted at rest (AES-256-GCM). Never store raw tokens.
+  accessToken       String?             @map("access_token")
+  refreshToken      String?             @map("refresh_token")
+  tokenExpiresAt    DateTime?           @map("token_expires_at")
+  status            SocialAccountStatus @default(connected)
+  createdAt         DateTime            @default(now()) @map("created_at")
+
+  client             Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  comments           Comment[]
+  analyticsSnapshots AnalyticsSnapshot[]
+
+  @@unique([platform, externalAccountId])
+  @@index([clientId])
+  @@map("social_accounts")
+}
+
+// ---------------------------------------------------------------------------
+// Publishing
+// ---------------------------------------------------------------------------
+
+model Post {
+  id              String     @id @default(cuid())
+  clientId        String     @map("client_id")
+  createdBy       String     @map("created_by")
+  content         String
+  mediaUrls       String[]   @map("media_urls")
+  platformTargets Platform[] @map("platform_targets")
+  status          PostStatus @default(draft)
+  scheduledFor    DateTime?  @map("scheduled_for")
+  publishedAt     DateTime?  @map("published_at")
+  // Map of platform -> external post id, populated on publish.
+  platformPostIds Json?      @map("platform_post_ids")
+  createdAt       DateTime   @default(now()) @map("created_at")
+
+  client  Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  creator User   @relation("PostCreatedBy", fields: [createdBy], references: [id])
+
+  @@index([clientId])
+  @@index([status])
+  @@map("posts")
+}
+
+// ---------------------------------------------------------------------------
+// Unified inbox
+// ---------------------------------------------------------------------------
+
+model Comment {
+  id               String        @id @default(cuid())
+  socialAccountId  String        @map("social_account_id")
+  platformCommentId String       @map("platform_comment_id")
+  authorName       String        @map("author_name")
+  body             String
+  sentiment        Sentiment?
+  assignedTo       String?       @map("assigned_to")
+  status           CommentStatus @default(open)
+  receivedAt       DateTime      @default(now()) @map("received_at")
+
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  assignee      User?         @relation("CommentAssignee", fields: [assignedTo], references: [id])
+  replies       Reply[]
+
+  @@unique([socialAccountId, platformCommentId])
+  @@index([status])
+  @@map("comments")
+}
+
+model Reply {
+  id          String   @id @default(cuid())
+  commentId   String   @map("comment_id")
+  body        String
+  sentBy      String?  @map("sent_by")
+  aiGenerated Boolean  @default(false) @map("ai_generated")
+  sentAt      DateTime? @map("sent_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  sender  User?   @relation("ReplySentBy", fields: [sentBy], references: [id])
+
+  @@index([commentId])
+  @@map("replies")
+}
+
+// ---------------------------------------------------------------------------
+// Analytics
+// ---------------------------------------------------------------------------
+
+model AnalyticsSnapshot {
+  id              String   @id @default(cuid())
+  socialAccountId String   @map("social_account_id")
+  date            DateTime @db.Date
+  followers       Int?
+  impressions     Int?
+  engagementRate  Float?   @map("engagement_rate")
+  rawJson         Json?    @map("raw_json")
+
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([socialAccountId, date])
+  @@index([socialAccountId])
+  @@map("analytics_snapshots")
+}
+
+// ---------------------------------------------------------------------------
+// Billing
+// ---------------------------------------------------------------------------
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  agencyId             String             @unique @map("agency_id")
+  stripeSubscriptionId String?            @map("stripe_subscription_id")
+  tier                 String
+  seats                Int                @default(1)
+  accountsLimit        Int                @default(1) @map("accounts_limit")
+  status               SubscriptionStatus @default(trialing)
+  createdAt            DateTime           @default(now()) @map("created_at")
+
+  agency Agency @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
