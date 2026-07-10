@@ -2,63 +2,48 @@ import Link from "next/link";
 
 export default function HomePage() {
   return (
-    <main style={{ maxWidth: 720, margin: "0 auto", padding: "48px 24px" }}>
-      <h1 style={{ fontSize: 32, marginBottom: 8 }}>SocialOps</h1>
-      <p style={{ color: "var(--muted)", marginTop: 0 }}>
-        Multi-tenant social media management — manage many clients&apos; accounts
-        from one place: publishing, approvals, scheduling, inbox, and reporting.
-      </p>
-
-      <Link
-        href="/dashboard"
-        style={{
-          display: "inline-block",
-          marginTop: 20,
-          padding: "12px 20px",
-          borderRadius: 10,
-          background: "var(--accent)",
-          color: "#fff",
-          textDecoration: "none",
-          fontSize: 16,
-        }}
-      >
-        Open the dashboard →
-      </Link>
-
-      <section style={{ marginTop: 32 }}>
-        <h2 style={{ fontSize: 18 }}>Everything else</h2>
-        <ul>
-          <li>
-            <Link href="/dashboard">Dashboard</Link> — manage clients &amp;
-            connect social accounts
-          </li>
-          <li>
-            <Link href="/compose">Composer</Link> — draft a post and target
-            multiple platforms
-          </li>
-          <li>
-            <Link href="/calendar">Calendar</Link> — scheduled &amp; published
-            posts by day
-          </li>
-          <li>
-            <Link href="/inbox">Inbox</Link> — comments across a client&apos;s
-            accounts, with replies &amp; canned responses
-          </li>
-          <li>
-            <Link href="/billing">Billing</Link> — subscription tiers (Stripe)
-          </li>
-          <li>
-            <Link href="/api/health">/api/health</Link> — service + adapter status
-          </li>
-        </ul>
-      </section>
-
-      <section style={{ marginTop: 24, color: "var(--muted)", fontSize: 14 }}>
+    <>
+      <div className="page-head">
+        <h1>Welcome to SocialOps</h1>
         <p>
-          New here? Open the dashboard, create your agency, add a client, then
-          connect that client&apos;s social accounts.
+          Manage many clients&apos; social accounts from one place — publishing,
+          approvals, scheduling, a unified inbox, and white-labeled reporting.
         </p>
-      </section>
-    </main>
+      </div>
+
+      <div className="card">
+        <div className="card-title">Get started</div>
+        <ol className="muted" style={{ margin: 0, paddingLeft: 18, lineHeight: 1.9 }}>
+          <li>
+            Open the <Link href="/dashboard">Dashboard</Link> and create your
+            agency (your team — the top-level tenant).
+          </li>
+          <li>Add clients (your customers / workspaces).</li>
+          <li>
+            Select a client and connect its social accounts (Meta, X, LinkedIn).
+          </li>
+          <li>Compose, schedule, reply in the inbox, and generate reports.</li>
+        </ol>
+        <div className="divider" />
+        <Link href="/dashboard" className="btn btn-primary">
+          Open the dashboard →
+        </Link>
+      </div>
+
+      <div className="grid-3" style={{ marginTop: 16 }}>
+        <Link href="/compose" className="card" style={{ textDecoration: "none" }}>
+          <div className="card-title">Composer</div>
+          <div className="muted small">Draft one post for many platforms.</div>
+        </Link>
+        <Link href="/inbox" className="card" style={{ textDecoration: "none" }}>
+          <div className="card-title">Inbox</div>
+          <div className="muted small">Comments, replies, AI drafts, sentiment.</div>
+        </Link>
+        <Link href="/billing" className="card" style={{ textDecoration: "none" }}>
+          <div className="card-title">Billing</div>
+          <div className="muted small">Stripe subscription tiers.</div>
+        </Link>
+      </div>
+    </>
   );
 }

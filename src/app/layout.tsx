@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { ClerkProvider } from "@clerk/nextjs";
+import { AppProvider } from "@/components/app-context";
+import { AppShell } from "@/components/app-shell";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,7 +19,11 @@ const clerkEnabled = Boolean(
 export default function RootLayout({ children }: { children: ReactNode }) {
   const page = (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AppProvider>
+          <AppShell>{children}</AppShell>
+        </AppProvider>
+      </body>
     </html>
   );
   return clerkEnabled ? <ClerkProvider>{page}</ClerkProvider> : page;

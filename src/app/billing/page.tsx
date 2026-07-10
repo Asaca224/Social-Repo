@@ -1,37 +1,27 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useApp } from "@/components/app-context";
 
 const TIERS = [
-  { id: "starter", name: "Starter", accounts: 5, seats: 2 },
-  { id: "growth", name: "Growth", accounts: 20, seats: 5 },
-  { id: "agency", name: "Agency", accounts: 100, seats: 20 },
+  { id: "starter", name: "Starter", accounts: 5, seats: 2, blurb: "For solo operators" },
+  { id: "growth", name: "Growth", accounts: 20, seats: 5, blurb: "For growing agencies" },
+  { id: "agency", name: "Agency", accounts: 100, seats: 20, blurb: "For full teams" },
 ] as const;
 
 export default function BillingPage() {
-  const [agencyId, setAgencyId] = useState("");
+  const { agencyId, api } = useApp();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const headers = () => ({ "x-agency-id": agencyId, "content-type": "application/json" });
 
   async function subscribe(tier: string) {
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch("/api/billing/checkout", {
-        method: "POST",
-        headers: headers(),
-        body: JSON.stringify({ tier }),
-      });
-      if (res.status === 503) {
-        setError("Billing is not configured (set STRIPE_SECRET_KEY + price ids).");
-        return;
-      }
-      if (!res.ok) {
-        setError(`Checkout failed (${res.status})`);
-        return;
-      }
+      const res = await api("/api/billing/checkout", { method: "POST", body: JSON.stringify({ tier }) });
+      if (res.status === 503) return setError("Billing is not configured (set STRIPE_SECRET_KEY + price ids).");
+      if (!res.ok) return setError(`Checkout failed (${res.status})`);
       const { url } = (await res.json()) as { url: string };
       window.location.href = url;
     } finally {
@@ -41,84 +31,56 @@ export default function BillingPage() {
 
   async function managePlan() {
     setError(null);
-    const res = await fetch("/api/billing/portal", { method: "POST", headers: headers() });
+    const res = await api("/api/billing/portal", { method: "POST" });
     if (res.ok) {
       const { url } = (await res.json()) as { url: string };
       window.location.href = url;
-    } else if (res.status === 503) {
-      setError("Billing is not configured.");
-    } else {
-      setError(`Could not open billing portal (${res.status})`);
-    }
+    } else if (res.status === 503) setError("Billing is not configured.");
+    else if (res.status === 409) setError("No subscription yet — subscribe to a plan first.");
+    else setError(`Could not open billing portal (${res.status})`);
   }
 
+  if (!agencyId)
+    return (
+      <div className="empty">
+        Set up your agency first. <Link href="/dashboard">Go to the dashboard →</Link>
+      </div>
+    );
+
   return (
-    <main style={{ maxWidth: 760, margin: "0 auto", padding: "48px 24px" }}>
-      <h1 style={{ fontSize: 24 }}>Billing</h1>
-      <p style={{ color: "var(--muted)", marginTop: 0 }}>
-        Subscription tiers by connected accounts and seats. (Dev: enter an agency
-        id; <code>x-agency-id</code> stands in for the Clerk session.)
-      </p>
+    <>
+      <div className="page-head">
+        <h1>Billing</h1>
+        <p>Subscription tiers by connected accounts and seats.</p>
+      </div>
 
-      <input
-        placeholder="agency id"
-        value={agencyId}
-        onChange={(e) => setAgencyId(e.target.value)}
-        style={{
-          padding: "8px 10px",
-          borderRadius: 8,
-          border: "1px solid var(--border)",
-          background: "var(--panel)",
-          color: "var(--text)",
-          margin: "12px 0",
-        }}
-      />
-      {error && <p style={{ color: "#ff5f5f" }}>{error}</p>}
+      {error && <div className="alert alert-error">{error}</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
+      <div className="grid-3">
         {TIERS.map((t) => (
-          <div key={t.id} style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 18 }}>
-            <h2 style={{ fontSize: 18, margin: 0 }}>{t.name}</h2>
-            <ul style={{ color: "var(--muted)", fontSize: 14, paddingLeft: 18 }}>
+          <div key={t.id} className="card">
+            <div className="card-title" style={{ marginBottom: 4 }}>{t.name}</div>
+            <div className="muted small" style={{ marginBottom: 12 }}>{t.blurb}</div>
+            <ul className="muted small" style={{ paddingLeft: 16, margin: "0 0 16px", lineHeight: 1.8 }}>
               <li>{t.accounts} connected accounts</li>
               <li>{t.seats} seats</li>
             </ul>
-            <button
-              type="button"
-              disabled={!agencyId || busy}
-              onClick={() => subscribe(t.id)}
-              style={{
-                width: "100%",
-                padding: "10px",
-                borderRadius: 8,
-                border: "none",
-                background: !agencyId || busy ? "var(--border)" : "var(--accent)",
-                color: "#fff",
-                cursor: !agencyId || busy ? "not-allowed" : "pointer",
-              }}
-            >
+            <button className="btn btn-primary" style={{ width: "100%" }} disabled={busy} onClick={() => subscribe(t.id)}>
               Subscribe
             </button>
           </div>
         ))}
       </div>
 
-      <button
-        type="button"
-        disabled={!agencyId}
-        onClick={managePlan}
-        style={{
-          marginTop: 20,
-          padding: "10px 16px",
-          borderRadius: 8,
-          border: "1px solid var(--border)",
-          background: "transparent",
-          color: "var(--text)",
-          cursor: agencyId ? "pointer" : "not-allowed",
-        }}
-      >
-        Manage existing subscription
-      </button>
-    </main>
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <div>
+            <div className="card-title" style={{ margin: 0 }}>Manage subscription</div>
+            <div className="muted small">Update payment method, change plan, or view invoices.</div>
+          </div>
+          <button className="btn" onClick={managePlan}>Open billing portal</button>
+        </div>
+      </div>
+    </>
   );
 }

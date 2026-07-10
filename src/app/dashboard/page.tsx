@@ -2,12 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useApp } from "@/components/app-context";
 
-interface Client {
-  id: string;
-  name: string;
-  createdAt: string;
-}
 interface Account {
   id: string;
   platform: string;
@@ -24,123 +20,32 @@ const PLATFORMS: { value: string; label: string; hint: string }[] = [
   { value: "google_business", label: "Google Business", hint: "Location ID" },
 ];
 
-const AGENCY_KEY = "socialops.agencyId";
-
 export default function DashboardPage() {
-  const [agencyId, setAgencyId] = useState("");
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const app = useApp();
 
-  const [clients, setClients] = useState<Client[]>([]);
-  const [selected, setSelected] = useState<Client | null>(null);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-
-  const headers = useCallback(
-    () => ({ "x-agency-id": agencyId, "content-type": "application/json" }),
-    [agencyId],
-  );
-
-  // Restore the agency from localStorage (dev stand-in for the Clerk session).
-  useEffect(() => {
-    setAgencyId(localStorage.getItem(AGENCY_KEY) ?? "");
-    setReady(true);
-  }, []);
-
-  const loadClients = useCallback(async () => {
-    if (!agencyId) return;
-    setError(null);
-    const res = await fetch("/api/clients", { headers: headers() });
-    if (!res.ok) return setError(`Load clients failed (${res.status})`);
-    setClients(((await res.json()) as { clients: Client[] }).clients);
-  }, [agencyId, headers]);
-
-  useEffect(() => {
-    if (ready && agencyId) void loadClients();
-  }, [ready, agencyId, loadClients]);
-
-  const loadAccounts = useCallback(
-    async (clientId: string) => {
-      const res = await fetch(`/api/social-accounts?clientId=${clientId}`, { headers: headers() });
-      if (res.ok) setAccounts(((await res.json()) as { accounts: Account[] }).accounts);
-    },
-    [headers],
-  );
-
-  function selectClient(c: Client) {
-    setSelected(c);
-    setAccounts([]);
-    void loadAccounts(c.id);
-  }
-
-  function chooseAgency(id: string) {
-    localStorage.setItem(AGENCY_KEY, id);
-    setAgencyId(id);
-    setSelected(null);
-  }
-
-  if (!ready) return null;
+  if (!app.ready) return null;
+  if (!app.agencyId) return <Onboarding />;
 
   return (
-    <main style={{ maxWidth: 980, margin: "0 auto", padding: "32px 24px" }}>
-      <h1 style={{ fontSize: 26, marginBottom: 4 }}>Agency dashboard</h1>
-      <p style={{ color: "var(--muted)", marginTop: 0 }}>
-        Manage your client workspaces and their connected social accounts.
-      </p>
-      {error && <p style={{ color: "#ff5f5f" }}>{error}</p>}
-
-      {!agencyId ? (
-        <WorkspaceSetup onReady={chooseAgency} setError={setError} />
-      ) : (
-        <>
-          <div style={sessionBar}>
-            <span style={{ color: "var(--muted)", fontSize: 13 }}>
-              Agency&nbsp;<code>{agencyId}</code>
-            </span>
-            <button type="button" style={ghostBtn} onClick={() => chooseAgency("")}>
-              Switch agency
-            </button>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 20, marginTop: 20 }}>
-            <ClientList
-              clients={clients}
-              selectedId={selected?.id}
-              onSelect={selectClient}
-              headers={headers}
-              onCreated={loadClients}
-              setError={setError}
-            />
-            <section>
-              {selected ? (
-                <ClientDetail
-                  client={selected}
-                  accounts={accounts}
-                  agencyId={agencyId}
-                  headers={headers}
-                  reloadAccounts={() => loadAccounts(selected.id)}
-                  setError={setError}
-                />
-              ) : (
-                <p style={{ color: "var(--muted)" }}>Select or create a client to manage its accounts.</p>
-              )}
-            </section>
-          </div>
-        </>
-      )}
-    </main>
+    <>
+      <div className="page-head">
+        <h1>Dashboard</h1>
+        <p>Manage your client workspaces and their connected social accounts.</p>
+      </div>
+      <div className="grid-2">
+        <ClientsPanel />
+        <AccountsPanel />
+      </div>
+    </>
   );
 }
 
-function WorkspaceSetup({
-  onReady,
-  setError,
-}: {
-  onReady: (id: string) => void;
-  setError: (s: string | null) => void;
-}) {
+function Onboarding() {
+  const { setSession } = useApp();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [existing, setExisting] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   async function createAgency() {
     setError(null);
@@ -150,246 +55,217 @@ function WorkspaceSetup({
       body: JSON.stringify({ name, adminEmail: email }),
     });
     if (res.status === 403) {
-      setError("Clerk is enabled — agencies are provisioned from your Clerk organization.");
+      setError("Clerk is enabled — agencies come from your Clerk organization.");
       return;
     }
     if (!res.ok) return setError(`Create agency failed (${res.status})`);
-    const { agencyId } = (await res.json()) as { agencyId: string };
-    onReady(agencyId);
+    const { agencyId, adminUserId } = (await res.json()) as {
+      agencyId: string;
+      adminUserId?: string;
+    };
+    setSession(agencyId, adminUserId);
   }
 
   return (
-    <div style={{ ...card, marginTop: 20, maxWidth: 520 }}>
-      <h2 style={{ fontSize: 18, marginTop: 0 }}>Get started</h2>
-      <p style={{ color: "var(--muted)", fontSize: 14 }}>
-        Create your agency (this is you / your team — the top-level tenant), then add clients under it.
-      </p>
-      <input placeholder="Agency name" value={name} onChange={(e) => setName(e.target.value)} style={input} />
-      <input placeholder="Admin email" value={email} onChange={(e) => setEmail(e.target.value)} style={input} />
-      <button type="button" style={primaryBtn} disabled={!name || !email} onClick={createAgency}>
-        Create agency
-      </button>
-      <div style={{ borderTop: "1px solid var(--border)", margin: "18px 0" }} />
-      <p style={{ color: "var(--muted)", fontSize: 13 }}>Already have an agency id?</p>
-      <div style={{ display: "flex", gap: 8 }}>
-        <input placeholder="agency id" value={existing} onChange={(e) => setExisting(e.target.value)} style={{ ...input, margin: 0, flex: 1 }} />
-        <button type="button" style={ghostBtn} disabled={!existing} onClick={() => onReady(existing)}>
-          Use
-        </button>
+    <>
+      <div className="page-head">
+        <h1>Set up your agency</h1>
+        <p>Your agency is the top-level tenant — you and your team. Create it to begin.</p>
       </div>
-    </div>
+      <div className="card" style={{ maxWidth: 520 }}>
+        {error && <div className="alert alert-error">{error}</div>}
+        <label className="label">Agency name</label>
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Northwind Social" />
+        <div style={{ height: 12 }} />
+        <label className="label">Admin email</label>
+        <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@agency.com" />
+        <div style={{ height: 16 }} />
+        <button className="btn btn-primary" disabled={!name || !email} onClick={createAgency}>
+          Create agency
+        </button>
+        <div className="divider" />
+        <label className="label">Already have an agency id?</label>
+        <div className="row">
+          <input className="input" value={existing} onChange={(e) => setExisting(e.target.value)} placeholder="agency id" />
+          <button className="btn" disabled={!existing} onClick={() => setSession(existing)}>
+            Use
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
 
-function ClientList({
-  clients,
-  selectedId,
-  onSelect,
-  headers,
-  onCreated,
-  setError,
-}: {
-  clients: Client[];
-  selectedId?: string;
-  onSelect: (c: Client) => void;
-  headers: () => Record<string, string>;
-  onCreated: () => void;
-  setError: (s: string | null) => void;
-}) {
+function ClientsPanel() {
+  const { clients, clientId, setClientId, reloadClients, api } = useApp();
   const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   async function createClient() {
     setError(null);
-    const res = await fetch("/api/clients", {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ name }),
-    });
+    const res = await api("/api/clients", { method: "POST", body: JSON.stringify({ name }) });
     if (!res.ok) return setError(`Create client failed (${res.status})`);
     setName("");
-    onCreated();
+    await reloadClients();
   }
 
   return (
-    <aside style={card}>
-      <h2 style={{ fontSize: 16, marginTop: 0 }}>Clients</h2>
-      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-        <input placeholder="New client name" value={name} onChange={(e) => setName(e.target.value)} style={{ ...input, margin: 0, flex: 1 }} />
-        <button type="button" style={ghostBtn} disabled={!name} onClick={createClient}>
+    <aside className="card">
+      <div className="card-title">Clients</div>
+      {error && <div className="alert alert-error">{error}</div>}
+      <div className="row" style={{ marginBottom: 12 }}>
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="New client name" />
+        <button className="btn" disabled={!name} onClick={createClient}>
           Add
         </button>
       </div>
-      {clients.length === 0 && <p style={{ color: "var(--muted)", fontSize: 13 }}>No clients yet.</p>}
-      <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-        {clients.map((c) => (
-          <li key={c.id}>
-            <button
-              type="button"
-              onClick={() => onSelect(c)}
-              style={{
-                width: "100%",
-                textAlign: "left",
-                padding: "8px 10px",
-                borderRadius: 8,
-                border: `1px solid ${selectedId === c.id ? "var(--accent)" : "var(--border)"}`,
-                background: selectedId === c.id ? "rgba(79,140,255,0.12)" : "transparent",
-                color: "var(--text)",
-                cursor: "pointer",
-              }}
-            >
-              {c.name}
-            </button>
-          </li>
-        ))}
-      </ul>
+      {clients.length === 0 ? (
+        <div className="empty">No clients yet. Add your first customer above.</div>
+      ) : (
+        <ul className="list">
+          {clients.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                className={`nav-link${clientId === c.id ? " active" : ""}`}
+                style={{
+                  width: "100%",
+                  color: clientId === c.id ? "#fff" : "var(--text)",
+                  background: clientId === c.id ? "var(--accent)" : "transparent",
+                }}
+                onClick={() => setClientId(c.id)}
+              >
+                {c.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </aside>
   );
 }
 
-function ClientDetail({
-  client,
-  accounts,
-  agencyId,
-  headers,
-  reloadAccounts,
-  setError,
-}: {
-  client: Client;
-  accounts: Account[];
-  agencyId: string;
-  headers: () => Record<string, string>;
-  reloadAccounts: () => void;
-  setError: (s: string | null) => void;
-}) {
+function AccountsPanel() {
+  const { selectedClient, agencyId, api } = useApp();
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [platform, setPlatform] = useState(PLATFORMS[0]!.value);
   const [externalAccountId, setExternalAccountId] = useState("");
   const [accessToken, setAccessToken] = useState("");
 
-  const hint = PLATFORMS.find((p) => p.value === platform)?.hint ?? "";
+  const clientId = selectedClient?.id;
+
+  const load = useCallback(async () => {
+    if (!clientId) return;
+    const res = await api(`/api/social-accounts?clientId=${clientId}`);
+    if (res.ok) setAccounts(((await res.json()) as { accounts: Account[] }).accounts);
+  }, [clientId, api]);
+
+  useEffect(() => {
+    setAccounts([]);
+    void load();
+  }, [load]);
 
   async function connect() {
+    if (!clientId) return;
     setError(null);
-    const res = await fetch("/api/social-accounts", {
+    const res = await api("/api/social-accounts", {
       method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ clientId: client.id, platform, externalAccountId, accessToken }),
+      body: JSON.stringify({ clientId, platform, externalAccountId, accessToken }),
     });
     if (res.status === 402) {
-      setError("Account limit reached for your plan — upgrade in Billing to connect more.");
+      setError("Account limit reached — upgrade your plan in Billing to connect more.");
       return;
     }
     if (!res.ok) return setError(`Connect failed (${res.status})`);
     setExternalAccountId("");
     setAccessToken("");
-    reloadAccounts();
+    await load();
   }
 
   async function openReport() {
-    const res = await fetch(`/api/clients/${client.id}/report?summary=1`, { headers: headers() });
+    if (!clientId) return;
+    const res = await api(`/api/clients/${clientId}/report?summary=1`);
     if (!res.ok) return setError(`Report failed (${res.status})`);
-    const blob = await res.blob();
-    window.open(URL.createObjectURL(blob), "_blank");
+    window.open(URL.createObjectURL(await res.blob()), "_blank");
   }
 
+  if (!selectedClient) {
+    return (
+      <section>
+        <div className="empty">Select a client on the left to manage its accounts.</div>
+      </section>
+    );
+  }
+
+  const hint = PLATFORMS.find((p) => p.value === platform)?.hint ?? "";
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={card}>
-        <h2 style={{ fontSize: 18, marginTop: 0 }}>{client.name}</h2>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <Link href="/compose" style={linkBtn}>Composer</Link>
-          <Link href="/calendar" style={linkBtn}>Calendar</Link>
-          <Link href="/inbox" style={linkBtn}>Inbox</Link>
-          <button type="button" style={linkBtn} onClick={openReport}>Report</button>
+    <section className="stack">
+      <div className="card">
+        <div className="row wrap" style={{ justifyContent: "space-between" }}>
+          <div className="card-title" style={{ margin: 0 }}>{selectedClient.name}</div>
+          <div className="row wrap">
+            <Link href="/compose" className="btn btn-sm">Compose</Link>
+            <Link href="/calendar" className="btn btn-sm">Calendar</Link>
+            <Link href="/inbox" className="btn btn-sm">Inbox</Link>
+            <button className="btn btn-sm" onClick={openReport}>Report</button>
+          </div>
         </div>
-        <p style={{ color: "var(--muted)", fontSize: 12, marginBottom: 0 }}>
-          Client id: <code>{client.id}</code> · agency <code>{agencyId}</code>
-        </p>
+        <div className="muted small" style={{ marginTop: 8 }}>
+          Client <code>{selectedClient.id}</code> · agency <code>{agencyId}</code>
+        </div>
       </div>
 
-      <div style={card}>
-        <h3 style={{ fontSize: 15, marginTop: 0 }}>Connected accounts</h3>
+      <div className="card">
+        <div className="card-title">Connected accounts</div>
+        {error && <div className="alert alert-error">{error}</div>}
         {accounts.length === 0 ? (
-          <p style={{ color: "var(--muted)", fontSize: 13 }}>No accounts connected yet.</p>
+          <div className="empty">No accounts connected yet.</div>
         ) : (
-          <ul style={{ listStyle: "none", padding: 0, margin: "0 0 8px" }}>
+          <ul className="list">
             {accounts.map((a) => (
-              <li key={a.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+              <li key={a.id} className="list-row">
                 <span>
-                  <strong>{a.platform}</strong>{" "}
-                  <span style={{ color: "var(--muted)", fontSize: 13 }}>{a.externalAccountId}</span>
+                  <strong style={{ textTransform: "capitalize" }}>{a.platform}</strong>{" "}
+                  <span className="muted small">{a.externalAccountId}</span>
                 </span>
-                <span style={{ fontSize: 12, color: a.status === "connected" ? "#2f9e57" : "#d19a00" }}>{a.status}</span>
+                <span className={`badge ${a.status === "connected" ? "badge-success" : "badge-warn"}`}>
+                  {a.status}
+                </span>
               </li>
             ))}
           </ul>
         )}
 
-        <h4 style={{ fontSize: 14, margin: "12px 0 6px" }}>Connect an account</h4>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <select value={platform} onChange={(e) => setPlatform(e.target.value)} style={input}>
-            {PLATFORMS.map((p) => (
-              <option key={p.value} value={p.value}>{p.label}</option>
-            ))}
-          </select>
-          <input placeholder={hint} value={externalAccountId} onChange={(e) => setExternalAccountId(e.target.value)} style={input} />
-          <input placeholder="Access token (stored encrypted)" value={accessToken} onChange={(e) => setAccessToken(e.target.value)} style={input} />
-          <button type="button" style={primaryBtn} disabled={!externalAccountId || !accessToken} onClick={connect}>
+        <div className="divider" />
+        <div className="card-title">Connect an account</div>
+        <div className="stack">
+          <div>
+            <label className="label">Platform</label>
+            <select className="select" value={platform} onChange={(e) => setPlatform(e.target.value)}>
+              {PLATFORMS.map((p) => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Account id</label>
+            <input className="input" placeholder={hint} value={externalAccountId} onChange={(e) => setExternalAccountId(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Access token</label>
+            <input className="input" placeholder="Stored encrypted at rest" value={accessToken} onChange={(e) => setAccessToken(e.target.value)} />
+          </div>
+          <button className="btn btn-primary" disabled={!externalAccountId || !accessToken} onClick={connect}>
             Connect account
           </button>
-          <p style={{ color: "var(--muted)", fontSize: 12, margin: 0 }}>
-            Paste the platform account id and an access token (e.g. a Meta Page token). A one-click
-            OAuth flow is a planned enhancement; tokens are encrypted at rest.
-          </p>
+          <div className="muted small">
+            Paste the platform account id and an access token (e.g. a Meta Page token).
+            One-click OAuth is a planned enhancement; tokens are encrypted at rest.
+          </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
-
-const card: React.CSSProperties = {
-  border: "1px solid var(--border)",
-  borderRadius: 12,
-  padding: 18,
-  background: "var(--panel)",
-};
-const sessionBar: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  marginTop: 16,
-};
-const input: React.CSSProperties = {
-  padding: "9px 11px",
-  borderRadius: 8,
-  border: "1px solid var(--border)",
-  background: "var(--bg)",
-  color: "var(--text)",
-  margin: "6px 0",
-  width: "100%",
-};
-const primaryBtn: React.CSSProperties = {
-  padding: "10px 14px",
-  borderRadius: 8,
-  border: "none",
-  background: "var(--accent)",
-  color: "#fff",
-  cursor: "pointer",
-};
-const ghostBtn: React.CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 8,
-  border: "1px solid var(--border)",
-  background: "transparent",
-  color: "var(--text)",
-  cursor: "pointer",
-};
-const linkBtn: React.CSSProperties = {
-  padding: "6px 12px",
-  borderRadius: 8,
-  border: "1px solid var(--border)",
-  background: "transparent",
-  color: "var(--text)",
-  textDecoration: "none",
-  cursor: "pointer",
-  fontSize: 14,
-};

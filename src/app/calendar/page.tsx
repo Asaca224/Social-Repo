@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useApp } from "@/components/app-context";
 
 interface Post {
   id: string;
@@ -11,59 +13,54 @@ interface Post {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  draft: "#6b7280",
-  pending_approval: "#d19a00",
-  approved: "#2f9e57",
-  scheduled: "#4f8cff",
+  draft: "#667085",
+  pending_approval: "var(--warn)",
+  approved: "var(--success)",
+  scheduled: "var(--accent)",
   published: "#7c5cff",
-  failed: "#ff5f5f",
+  failed: "var(--danger)",
 };
+const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function monthMatrix(year: number, month: number): (Date | null)[][] {
-  const first = new Date(year, month, 1);
-  const startDow = first.getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const startDow = new Date(year, month, 1).getDay();
+  const days = new Date(year, month + 1, 0).getDate();
   const cells: (Date | null)[] = [];
   for (let i = 0; i < startDow; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, month, d));
+  for (let d = 1; d <= days; d++) cells.push(new Date(year, month, d));
   while (cells.length % 7 !== 0) cells.push(null);
   const weeks: (Date | null)[][] = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
   return weeks;
 }
 
-const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
 export default function CalendarPage() {
-  const [agencyId, setAgencyId] = useState("");
-  const [clientId, setClientId] = useState("");
+  const { agencyId, selectedClient, api } = useApp();
   const [posts, setPosts] = useState<Post[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [cursor, setCursor] = useState(() => {
-    const now = new Date();
-    return { year: now.getFullYear(), month: now.getMonth() };
+    const n = new Date();
+    return { year: n.getFullYear(), month: n.getMonth() };
   });
 
-  async function load() {
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/posts?clientId=${encodeURIComponent(clientId)}`,
-        { headers: { "x-agency-id": agencyId } },
-      );
-      if (!res.ok) {
-        setError(`Request failed (${res.status})`);
-        setPosts([]);
-        return;
-      }
-      const data = (await res.json()) as { posts: Post[] };
-      setPosts(data.posts);
-    } catch {
-      setError("Network error");
-    }
-  }
+  const clientId = selectedClient?.id;
+  const load = useCallback(async () => {
+    if (!clientId) return;
+    const res = await api(`/api/posts?clientId=${clientId}`);
+    if (res.ok) setPosts(((await res.json()) as { posts: Post[] }).posts);
+  }, [clientId, api]);
 
-  // Index posts by YYYY-MM-DD of their scheduled (or published) date.
+  useEffect(() => {
+    setPosts([]);
+    void load();
+  }, [load]);
+
+  if (!agencyId)
+    return (
+      <div className="empty">
+        Set up your agency first. <Link href="/dashboard">Go to the dashboard →</Link>
+      </div>
+    );
+
   const byDay = new Map<string, Post[]>();
   for (const p of posts) {
     const when = p.scheduledFor ?? p.publishedAt;
@@ -73,123 +70,80 @@ export default function CalendarPage() {
   }
 
   const weeks = monthMatrix(cursor.year, cursor.month);
-  const monthLabel = new Date(cursor.year, cursor.month, 1).toLocaleString(
-    "en-US",
-    { month: "long", year: "numeric" },
-  );
-  const shift = (delta: number) => {
-    const m = cursor.month + delta;
-    setCursor({
-      year: cursor.year + Math.floor(m / 12),
-      month: ((m % 12) + 12) % 12,
-    });
+  const label = new Date(cursor.year, cursor.month, 1).toLocaleString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+  const shift = (d: number) => {
+    const m = cursor.month + d;
+    setCursor({ year: cursor.year + Math.floor(m / 12), month: ((m % 12) + 12) % 12 });
   };
 
   return (
-    <main style={{ maxWidth: 960, margin: "0 auto", padding: "32px 24px" }}>
-      <h1 style={{ fontSize: 24 }}>Content calendar</h1>
-      <p style={{ color: "var(--muted)", marginTop: 0 }}>
-        Scheduled and published posts by day. (Dev: enter an agency + client id
-        to load — the <code>x-agency-id</code> header stands in for the Clerk
-        session.)
-      </p>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "16px 0" }}>
-        <input
-          placeholder="agency id"
-          value={agencyId}
-          onChange={(e) => setAgencyId(e.target.value)}
-          style={inputStyle}
-        />
-        <input
-          placeholder="client id"
-          value={clientId}
-          onChange={(e) => setClientId(e.target.value)}
-          style={inputStyle}
-        />
-        <button type="button" onClick={load} disabled={!agencyId || !clientId} style={btnStyle}>
-          Load
-        </button>
-      </div>
-      {error && <p style={{ color: "#ff5f5f" }}>{error}</p>}
-
-      <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "8px 0" }}>
-        <button type="button" onClick={() => shift(-1)} style={btnStyle}>
-          ←
-        </button>
-        <strong>{monthLabel}</strong>
-        <button type="button" onClick={() => shift(1)} style={btnStyle}>
-          →
-        </button>
+    <>
+      <div className="page-head">
+        <h1>Content calendar</h1>
+        <p>Scheduled and published posts by day{selectedClient ? ` for ${selectedClient.name}` : ""}.</p>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
-        {DOW.map((d) => (
-          <div key={d} style={{ color: "var(--muted)", fontSize: 12, padding: "4px 6px" }}>
-            {d}
+      {!selectedClient ? (
+        <div className="empty">Select a client in the top bar to see its calendar.</div>
+      ) : (
+        <div className="card">
+          <div className="row" style={{ marginBottom: 14 }}>
+            <button className="btn btn-sm" onClick={() => shift(-1)}>←</button>
+            <strong>{label}</strong>
+            <button className="btn btn-sm" onClick={() => shift(1)}>→</button>
+            <span className="spacer" />
+            <span className="muted small">{posts.length} posts</span>
           </div>
-        ))}
-        {weeks.flat().map((date, i) => {
-          const key = date
-            ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
-            : `empty-${i}`;
-          const dayPosts = date ? (byDay.get(key) ?? []) : [];
-          return (
-            <div
-              key={key}
-              style={{
-                minHeight: 88,
-                border: "1px solid var(--border)",
-                borderRadius: 8,
-                background: date ? "var(--panel)" : "transparent",
-                padding: 6,
-              }}
-            >
-              {date && (
-                <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                  {date.getDate()}
-                </div>
-              )}
-              {dayPosts.map((p) => (
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6 }}>
+            {DOW.map((d) => (
+              <div key={d} className="muted small" style={{ padding: "2px 4px" }}>{d}</div>
+            ))}
+            {weeks.flat().map((date, i) => {
+              const key = date
+                ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+                : `e${i}`;
+              const dayPosts = date ? byDay.get(key) ?? [] : [];
+              return (
                 <div
-                  key={p.id}
-                  title={p.content}
+                  key={key}
                   style={{
-                    marginTop: 4,
-                    padding: "2px 6px",
-                    borderRadius: 6,
-                    fontSize: 12,
-                    background: STATUS_COLOR[p.status] ?? "#6b7280",
-                    color: "#fff",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                    minHeight: 92,
+                    border: "1px solid var(--border)",
+                    borderRadius: 8,
+                    background: date ? "var(--surface-2)" : "transparent",
+                    padding: 6,
                   }}
                 >
-                  {p.content || "(untitled)"}
+                  {date && <div className="muted small">{date.getDate()}</div>}
+                  {dayPosts.map((p) => (
+                    <div
+                      key={p.id}
+                      title={p.content}
+                      style={{
+                        marginTop: 4,
+                        padding: "2px 6px",
+                        borderRadius: 6,
+                        fontSize: 12,
+                        color: "#fff",
+                        background: STATUS_COLOR[p.status] ?? "#667085",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {p.content || "(untitled)"}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          );
-        })}
-      </div>
-    </main>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  padding: "8px 10px",
-  borderRadius: 8,
-  border: "1px solid var(--border)",
-  background: "var(--panel)",
-  color: "var(--text)",
-};
-
-const btnStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 8,
-  border: "1px solid var(--border)",
-  background: "transparent",
-  color: "var(--text)",
-  cursor: "pointer",
-};

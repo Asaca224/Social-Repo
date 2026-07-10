@@ -1,178 +1,146 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useApp } from "@/components/app-context";
 
 interface Comment {
   id: string;
   authorName: string;
   body: string;
   sentiment: string | null;
-  assignedTo: string | null;
   status: string;
   receivedAt: string;
-  socialAccount: { platform: string; externalAccountId: string };
+  socialAccount: { platform: string };
 }
-
 interface Canned {
   id: string;
   title: string;
   body: string;
 }
 
-const STATUS_COLOR: Record<string, string> = {
-  open: "#4f8cff",
-  replied: "#2f9e57",
-  ignored: "#6b7280",
+const STATUS_CLASS: Record<string, string> = {
+  open: "badge-accent",
+  replied: "badge-success",
+  ignored: "badge",
 };
 
 export default function InboxPage() {
-  const [agencyId, setAgencyId] = useState("");
-  const [clientId, setClientId] = useState("");
+  const { agencyId, selectedClient, api } = useApp();
   const [comments, setComments] = useState<Comment[]>([]);
   const [canned, setCanned] = useState<Canned[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
-  const headers = () => ({ "x-agency-id": agencyId, "content-type": "application/json" });
+  const clientId = selectedClient?.id;
 
-  async function load() {
+  const load = useCallback(async () => {
+    if (!clientId) return;
     setError(null);
-    try {
-      const [cRes, kRes] = await Promise.all([
-        fetch(`/api/comments?clientId=${encodeURIComponent(clientId)}`, { headers: headers() }),
-        fetch(`/api/canned-responses?clientId=${encodeURIComponent(clientId)}`, { headers: headers() }),
-      ]);
-      if (!cRes.ok) {
-        setError(`Comments request failed (${cRes.status})`);
-        return;
-      }
-      setComments(((await cRes.json()) as { comments: Comment[] }).comments);
-      if (kRes.ok) setCanned(((await kRes.json()) as { cannedResponses: Canned[] }).cannedResponses);
-    } catch {
-      setError("Network error");
-    }
-  }
+    const [c, k] = await Promise.all([
+      api(`/api/comments?clientId=${clientId}`),
+      api(`/api/canned-responses?clientId=${clientId}`),
+    ]);
+    if (!c.ok) return setError(`Comments failed (${c.status})`);
+    setComments(((await c.json()) as { comments: Comment[] }).comments);
+    if (k.ok) setCanned(((await k.json()) as { cannedResponses: Canned[] }).cannedResponses);
+  }, [clientId, api]);
 
-  async function sendReply(commentId: string) {
-    const body = drafts[commentId]?.trim();
+  useEffect(() => {
+    setComments([]);
+    setCanned([]);
+    void load();
+  }, [load]);
+
+  async function sendReply(id: string) {
+    const body = drafts[id]?.trim();
     if (!body) return;
-    const res = await fetch(`/api/comments/${commentId}/reply`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({ body }),
-    });
+    const res = await api(`/api/comments/${id}/reply`, { method: "POST", body: JSON.stringify({ body }) });
     if (res.ok) {
-      setDrafts((d) => ({ ...d, [commentId]: "" }));
+      setDrafts((d) => ({ ...d, [id]: "" }));
       void load();
-    } else {
-      setError(`Reply failed (${res.status})`);
-    }
+    } else setError(`Reply failed (${res.status})`);
   }
 
-  // AI drafts a suggested reply (human still reviews and sends).
-  async function aiDraft(commentId: string) {
+  async function aiDraft(id: string) {
     setError(null);
-    const res = await fetch(`/api/comments/${commentId}/ai-draft`, {
-      method: "POST",
-      headers: headers(),
-    });
+    const res = await api(`/api/comments/${id}/ai-draft`, { method: "POST" });
     if (res.ok) {
       const { draft } = (await res.json()) as { draft: string };
-      setDrafts((d) => ({ ...d, [commentId]: draft }));
-    } else if (res.status === 503) {
-      setError("AI is not configured (set ANTHROPIC_API_KEY).");
-    } else {
-      setError(`AI draft failed (${res.status})`);
-    }
+      setDrafts((d) => ({ ...d, [id]: draft }));
+    } else if (res.status === 503) setError("AI is not configured (set ANTHROPIC_API_KEY).");
+    else setError(`AI draft failed (${res.status})`);
   }
 
-  return (
-    <main style={{ maxWidth: 820, margin: "0 auto", padding: "32px 24px" }}>
-      <h1 style={{ fontSize: 24 }}>Unified inbox</h1>
-      <p style={{ color: "var(--muted)", marginTop: 0 }}>
-        Comments across a client&apos;s connected accounts. (Dev: enter agency +
-        client id; <code>x-agency-id</code> stands in for the Clerk session.)
-      </p>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "16px 0" }}>
-        <input placeholder="agency id" value={agencyId} onChange={(e) => setAgencyId(e.target.value)} style={inputStyle} />
-        <input placeholder="client id" value={clientId} onChange={(e) => setClientId(e.target.value)} style={inputStyle} />
-        <button type="button" onClick={load} disabled={!agencyId || !clientId} style={btnStyle}>
-          Load
-        </button>
+  if (!agencyId)
+    return (
+      <div className="empty">
+        Set up your agency first. <Link href="/dashboard">Go to the dashboard →</Link>
       </div>
-      {error && <p style={{ color: "#ff5f5f" }}>{error}</p>}
+    );
 
-      {comments.length === 0 && <p style={{ color: "var(--muted)" }}>No comments loaded.</p>}
+  return (
+    <>
+      <div className="page-head">
+        <h1>Unified inbox</h1>
+        <p>Comments across {selectedClient ? selectedClient.name : "a client"}&apos;s connected accounts.</p>
+      </div>
 
-      <ul style={{ listStyle: "none", padding: 0, display: "flex", flexDirection: "column", gap: 12 }}>
-        {comments.map((c) => (
-          <li key={c.id} style={{ border: "1px solid var(--border)", borderRadius: 10, padding: 14, background: "var(--panel)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-              <strong>{c.authorName}</strong>
-              <span style={{ fontSize: 12, color: "#fff", background: STATUS_COLOR[c.status] ?? "#6b7280", borderRadius: 999, padding: "2px 8px" }}>
-                {c.status}
-              </span>
+      {error && <div className="alert alert-error">{error}</div>}
+
+      {!selectedClient ? (
+        <div className="empty">Select a client in the top bar to load its inbox.</div>
+      ) : comments.length === 0 ? (
+        <div className="empty">No comments yet for this client.</div>
+      ) : (
+        <div className="stack">
+          {comments.map((c) => (
+            <div key={c.id} className="card">
+              <div className="row" style={{ justifyContent: "space-between" }}>
+                <strong>{c.authorName}</strong>
+                <span className={`badge ${STATUS_CLASS[c.status] ?? "badge"}`}>{c.status}</span>
+              </div>
+              <div className="muted small" style={{ margin: "2px 0 8px" }}>
+                {c.socialAccount.platform} · {new Date(c.receivedAt).toLocaleString()}
+                {c.sentiment ? ` · ${c.sentiment}` : ""}
+              </div>
+              <p style={{ margin: "0 0 12px" }}>{c.body}</p>
+
+              {canned.length > 0 && (
+                <select
+                  className="select"
+                  style={{ marginBottom: 8 }}
+                  defaultValue=""
+                  onChange={(e) => {
+                    const pick = canned.find((k) => k.id === e.target.value);
+                    if (pick) setDrafts((d) => ({ ...d, [c.id]: pick.body }));
+                  }}
+                >
+                  <option value="" disabled>Insert canned response…</option>
+                  {canned.map((k) => (
+                    <option key={k.id} value={k.id}>{k.title}</option>
+                  ))}
+                </select>
+              )}
+
+              <div className="row">
+                <input
+                  className="input"
+                  placeholder="Write a reply…"
+                  value={drafts[c.id] ?? ""}
+                  onChange={(e) => setDrafts((d) => ({ ...d, [c.id]: e.target.value }))}
+                />
+                <button className="btn btn-sm" onClick={() => aiDraft(c.id)} title="AI draft (Claude Haiku)">
+                  ✨ Draft
+                </button>
+                <button className="btn btn-primary btn-sm" disabled={!drafts[c.id]?.trim()} onClick={() => sendReply(c.id)}>
+                  Reply
+                </button>
+              </div>
             </div>
-            <div style={{ fontSize: 12, color: "var(--muted)", margin: "2px 0 8px" }}>
-              {c.socialAccount.platform} · {new Date(c.receivedAt).toLocaleString()}
-            </div>
-            <p style={{ margin: "0 0 10px" }}>{c.body}</p>
-
-            {canned.length > 0 && (
-              <select
-                defaultValue=""
-                onChange={(e) => {
-                  const pick = canned.find((k) => k.id === e.target.value);
-                  if (pick) setDrafts((d) => ({ ...d, [c.id]: pick.body }));
-                }}
-                style={{ ...inputStyle, marginBottom: 8 }}
-              >
-                <option value="" disabled>
-                  Insert canned response…
-                </option>
-                {canned.map((k) => (
-                  <option key={k.id} value={k.id}>
-                    {k.title}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
-                placeholder="Write a reply…"
-                value={drafts[c.id] ?? ""}
-                onChange={(e) => setDrafts((d) => ({ ...d, [c.id]: e.target.value }))}
-                style={{ ...inputStyle, flex: 1 }}
-              />
-              <button type="button" onClick={() => aiDraft(c.id)} style={btnStyle} title="AI draft (Claude Haiku)">
-                ✨ Draft
-              </button>
-              <button type="button" onClick={() => sendReply(c.id)} disabled={!drafts[c.id]?.trim()} style={btnStyle}>
-                Reply
-              </button>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </main>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  padding: "8px 10px",
-  borderRadius: 8,
-  border: "1px solid var(--border)",
-  background: "var(--panel)",
-  color: "var(--text)",
-};
-
-const btnStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 8,
-  border: "1px solid var(--border)",
-  background: "transparent",
-  color: "var(--text)",
-  cursor: "pointer",
-};
