@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { signState, verifyState } from "@/lib/oauth-state";
 import { buildAuthUrl } from "@/lib/meta-oauth";
+import { buildAuthUrl as buildTikTokAuthUrl } from "@/lib/tiktok-oauth";
 
 describe("OAuth state signing", () => {
   it("round-trips agency + client and adds a nonce", () => {
@@ -43,5 +44,19 @@ describe("buildAuthUrl", () => {
     );
     expect(url.searchParams.get("scope")).toContain("instagram_content_publish");
     expect(url.searchParams.get("scope")).toContain("pages_manage_posts");
+  });
+
+  it("builds the TikTok authorize URL", () => {
+    process.env.TIKTOK_CLIENT_KEY = "ttkey";
+    process.env.APP_URL = "https://app.example.com";
+    const url = new URL(buildTikTokAuthUrl("STATE"));
+    expect(url.host).toBe("www.tiktok.com");
+    expect(url.pathname).toContain("/v2/auth/authorize");
+    expect(url.searchParams.get("client_key")).toBe("ttkey");
+    expect(url.searchParams.get("state")).toBe("STATE");
+    expect(url.searchParams.get("scope")).toContain("user.info.basic");
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "https://app.example.com/api/oauth/tiktok/callback",
+    );
   });
 });

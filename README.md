@@ -90,6 +90,11 @@ shared. A one-time Meta app setup is required:
 4. Set env vars: `META_APP_ID`, `META_APP_SECRET`, and `APP_URL` (or
    `META_OAUTH_REDIRECT_URI`). `TOKEN_ENCRYPTION_KEY` must be set (used to sign
    the OAuth state).
+
+**TikTok** has a **Connect with TikTok** button too (connect-only for now;
+publishing via the Content Posting API is a later phase). Create a TikTok app at
+developers.tiktok.com with Login Kit, add `…/api/oauth/tiktok/callback` as the
+redirect URI, and set `TIKTOK_CLIENT_KEY` / `TIKTOK_CLIENT_SECRET`.
 4. From a selected client, jump to the composer, calendar, inbox, or generate a
    white-labeled report. The plan's `accounts_limit` caps how many accounts you
    can connect (upgrade in **Billing**).

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Platform, SocialAccountType } from "@prisma/client";
-import { prisma } from "@/lib/db";
+import { prisma, isDatabaseUnavailable } from "@/lib/db";
 import { encryptToken } from "@/lib/crypto";
 import { assertClientInTenant, TenantAccessError } from "@/lib/tenancy";
 import { errorResponse, json, zodErrorResponse } from "@/lib/api";
@@ -118,7 +118,8 @@ export async function POST(request: Request) {
     }
   }
 
-  const account = await prisma.socialAccount.upsert({
+  try {
+    const account = await prisma.socialAccount.upsert({
     where: {
       platform_externalAccountId: {
         platform: data.platform,
@@ -143,6 +144,15 @@ export async function POST(request: Request) {
       status: "connected",
     },
     select: { id: true, platform: true, externalAccountId: true, accountType: true, status: true },
-  });
-  return json({ account }, { status: 201 });
+    });
+    return json({ account }, { status: 201 });
+  } catch (err) {
+    if (isDatabaseUnavailable(err)) {
+      return errorResponse(
+        "Database schema is out of date — apply the latest migration (run `npm run db:deploy`), then retry.",
+        503,
+      );
+    }
+    throw err;
+  }
 }

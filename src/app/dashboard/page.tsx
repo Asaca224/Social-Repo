@@ -296,16 +296,26 @@ function AccountsPanel() {
         <div className="divider" />
         <div className="card-title">Connect an account</div>
 
-        <a
-          className="btn btn-primary"
-          href={`/api/oauth/meta/start?agencyId=${encodeURIComponent(agencyId)}&clientId=${selectedClient.id}`}
-          style={{ textDecoration: "none" }}
-        >
-          Connect with Facebook / Instagram
-        </a>
+        <div className="row wrap">
+          <a
+            className="btn btn-primary"
+            href={`/api/oauth/meta/start?agencyId=${encodeURIComponent(agencyId)}&clientId=${selectedClient.id}`}
+            style={{ textDecoration: "none" }}
+          >
+            Connect with Facebook / Instagram
+          </a>
+          <a
+            className="btn"
+            href={`/api/oauth/tiktok/start?agencyId=${encodeURIComponent(agencyId)}&clientId=${selectedClient.id}`}
+            style={{ textDecoration: "none" }}
+          >
+            Connect with TikTok
+          </a>
+        </div>
         <div className="muted small" style={{ margin: "8px 0 14px" }}>
-          Log in on Meta&apos;s page and approve — we import your Pages and linked
-          Instagram accounts automatically. No password is shared with us.
+          Log in on the platform&apos;s page and approve — accounts are imported
+          automatically, no password shared. (TikTok connect only for now;
+          publishing to TikTok is coming later.)
         </div>
 
         <div className="divider" />

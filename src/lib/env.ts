@@ -15,6 +15,11 @@ const envSchema = z.object({
   META_GRAPH_API_VERSION: z.string().default("v21.0"),
   // Optional override for the OAuth callback URL (else derived from APP_URL).
   META_OAUTH_REDIRECT_URI: z.string().url().optional(),
+
+  // TikTok Login Kit (OAuth). Connect-only until publishing lands.
+  TIKTOK_CLIENT_KEY: z.string().optional(),
+  TIKTOK_CLIENT_SECRET: z.string().optional(),
+  TIKTOK_OAUTH_REDIRECT_URI: z.string().url().optional(),
   // Token echoed back during Meta webhook subscription verification.
   META_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
 
