@@ -48,8 +48,14 @@ export async function GET() {
     // password — Prisma messages don't include it) to pinpoint the cause:
     // P1000 auth failed, P1001 can't reach host, P1003 db doesn't exist, etc.
     const code = (err as { code?: string })?.code ?? null;
-    const detail =
-      err instanceof Error ? err.message.split("\n").slice(0, 3).join(" ").slice(0, 300) : null;
+    // Surface the meaningful line(s), skipping the "Invalid `prisma...` invocation:"
+    // header and blank lines, so the real cause (can't reach / auth failed) shows.
+    const lines = (err instanceof Error ? err.message : "")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .filter((l) => !l.startsWith("Invalid `prisma"));
+    const detail = (lines.slice(0, 2).join(" ") || "unknown").slice(0, 300);
     if (isDatabaseUnavailable(err)) {
       return json(
         {
