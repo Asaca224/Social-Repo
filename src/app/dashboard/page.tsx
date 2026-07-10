@@ -33,11 +33,45 @@ export default function DashboardPage() {
         <h1>Dashboard</h1>
         <p>Manage your client workspaces and their connected social accounts.</p>
       </div>
+      <OAuthResultBanner />
       <div className="grid-2">
         <ClientsPanel />
         <AccountsPanel />
       </div>
     </>
+  );
+}
+
+/** Shows the outcome of the Meta OAuth redirect (reads ?oauth= then clears it). */
+function OAuthResultBanner() {
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauth = params.get("oauth");
+    if (!oauth) return;
+    const map: Record<string, { ok: boolean; text: string }> = {
+      connected: { ok: true, text: `Connected ${params.get("count") ?? ""} account(s) via Meta.` },
+      denied: { ok: false, text: "Meta authorization was cancelled." },
+      notconfigured: { ok: false, text: "Meta OAuth isn't configured (set META_APP_ID / META_APP_SECRET)." },
+      noagency: { ok: false, text: "Couldn't determine your agency for the OAuth flow." },
+      noclient: { ok: false, text: "That client wasn't found for OAuth." },
+      badstate: { ok: false, text: "OAuth state was invalid or expired — please retry." },
+      error: { ok: false, text: "Something went wrong connecting via Meta." },
+    };
+    setMsg(map[oauth] ?? null);
+    // Strip the query so a refresh doesn't re-show it.
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
+
+  if (!msg) return null;
+  return (
+    <div
+      className={`alert ${msg.ok ? "" : "alert-error"}`}
+      style={msg.ok ? { background: "var(--success-soft)", color: "var(--success)" } : undefined}
+    >
+      {msg.text}
+    </div>
   );
 }
 
@@ -261,6 +295,21 @@ function AccountsPanel() {
 
         <div className="divider" />
         <div className="card-title">Connect an account</div>
+
+        <a
+          className="btn btn-primary"
+          href={`/api/oauth/meta/start?agencyId=${encodeURIComponent(agencyId)}&clientId=${selectedClient.id}`}
+          style={{ textDecoration: "none" }}
+        >
+          Connect with Facebook / Instagram
+        </a>
+        <div className="muted small" style={{ margin: "8px 0 14px" }}>
+          Log in on Meta&apos;s page and approve — we import your Pages and linked
+          Instagram accounts automatically. No password is shared with us.
+        </div>
+
+        <div className="divider" />
+        <div className="muted small" style={{ marginBottom: 10 }}>Or connect manually</div>
         <div className="stack">
           <div>
             <label className="label">Platform</label>

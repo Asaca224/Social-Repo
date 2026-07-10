@@ -70,6 +70,26 @@ Open **`/dashboard`** — the agency console:
      switch to Professional (free/instant in the IG app). The id is the Instagram
      *user id* (the IG account linked to a Facebook Page), and Instagram publishes
      via its own two-step media → media_publish flow (image/caption).
+   - **Or use "Connect with Facebook / Instagram"** (OAuth) to skip pasting ids
+     and tokens — see below.
+
+### One-click OAuth (Connect with Facebook/Instagram)
+
+The dashboard's **Connect with Facebook / Instagram** button sends the user to
+Meta's login dialog; on approval it imports their Pages and linked Instagram
+Business accounts automatically (tokens encrypted at rest). No passwords are
+shared. A one-time Meta app setup is required:
+
+1. Create an app at **developers.facebook.com** → add the **Facebook Login** product.
+2. Under Facebook Login → Settings, add your **Valid OAuth Redirect URI**:
+   `https://YOUR_DOMAIN/api/oauth/meta/callback` (must match exactly).
+3. Request the scopes the flow uses: `pages_show_list`, `pages_read_engagement`,
+   `pages_manage_posts`, `pages_manage_engagement`, `instagram_basic`,
+   `instagram_content_publish`, `business_management` (App Review for production;
+   your own accounts work in dev mode).
+4. Set env vars: `META_APP_ID`, `META_APP_SECRET`, and `APP_URL` (or
+   `META_OAUTH_REDIRECT_URI`). `TOKEN_ENCRYPTION_KEY` must be set (used to sign
+   the OAuth state).
 4. From a selected client, jump to the composer, calendar, inbox, or generate a
    white-labeled report. The plan's `accounts_limit` caps how many accounts you
    can connect (upgrade in **Billing**).
